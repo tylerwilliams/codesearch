@@ -1,0 +1,50 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+.DS_Store
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Bazel directories
+/bazel-*
+
+# MODULE.bazel stuff, for now
+MODULE.bazel
+MODULE.bazel.lock
+
+# Generated protos
+**/proto/**/*.pb.go
+**/proto/**/*_ts_proto.d.ts
+**/proto/**/*_ts_proto.js
+
+# Node dependencies
+node_modules
+
+# Yarn logs
+yarn-error.log
+
+# User specific .bazelrc
+user.bazelrc
+
+# genhtml coverage outputs
+/cover
+
+# bazel
+bazel-codesearch
