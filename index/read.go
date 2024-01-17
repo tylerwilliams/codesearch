@@ -72,6 +72,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+
+	"github.com/google/codesearch/query"
 )
 
 const (
@@ -330,16 +332,16 @@ func (ix *Index) postingOr(list []uint32, trigram uint32, restrict []uint32) []u
 	return x
 }
 
-func (ix *Index) PostingQuery(q *Query) []uint32 {
+func (ix *Index) PostingQuery(q *query.Query) []uint32 {
 	return ix.postingQuery(q, nil)
 }
 
-func (ix *Index) postingQuery(q *Query, restrict []uint32) (ret []uint32) {
+func (ix *Index) postingQuery(q *query.Query, restrict []uint32) (ret []uint32) {
 	var list []uint32
 	switch q.Op {
-	case QNone:
+	case query.QNone:
 		// nothing
-	case QAll:
+	case query.QAll:
 		if restrict != nil {
 			return restrict
 		}
@@ -348,7 +350,7 @@ func (ix *Index) postingQuery(q *Query, restrict []uint32) (ret []uint32) {
 			list[i] = uint32(i)
 		}
 		return list
-	case QAnd:
+	case query.QAnd:
 		for _, t := range q.Trigram {
 			tri := uint32(t[0])<<16 | uint32(t[1])<<8 | uint32(t[2])
 			if list == nil {
@@ -369,7 +371,7 @@ func (ix *Index) postingQuery(q *Query, restrict []uint32) (ret []uint32) {
 				return nil
 			}
 		}
-	case QOr:
+	case query.QOr:
 		for _, t := range q.Trigram {
 			tri := uint32(t[0])<<16 | uint32(t[1])<<8 | uint32(t[2])
 			if list == nil {

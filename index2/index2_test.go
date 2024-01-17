@@ -13,4 +13,3 @@ func TestFile(t *testing.T) {
 		t.Fatalf("File() returned %q, should end with /.csearchindex2", f)
 	}
 }
-

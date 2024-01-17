@@ -7,6 +7,8 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//index",
+        "//index2",
+        "//query",
         "//regexp",
     ],
 )

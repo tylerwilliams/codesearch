@@ -12,6 +12,8 @@ import (
 	"runtime/pprof"
 
 	"github.com/google/codesearch/index"
+	"github.com/google/codesearch/index2"
+	"github.com/google/codesearch/query"
 	"github.com/google/codesearch/regexp"
 )
 
@@ -55,12 +57,53 @@ var (
 	matches bool
 )
 
+type iindex interface {
+	PostingQuery(q *query.Query) []uint32
+	Name(fileid uint32) string
+}
+
+func runQuery(ix iindex, q *query.Query, fre *regexp.Regexp) []uint32 {
+	var post []uint32
+	if *bruteFlag {
+		post = ix.PostingQuery(&query.Query{Op: query.QAll})
+	} else {
+		post = ix.PostingQuery(q)
+	}
+	if *verboseFlag {
+		log.Printf("post query identified %d possible files\n", len(post))
+	}
+
+	if fre != nil {
+		fnames := make([]uint32, 0, len(post))
+
+		for _, fileid := range post {
+			name := ix.Name(fileid)
+			if fre.MatchString(name, true, true) < 0 {
+				continue
+			}
+			fnames = append(fnames, fileid)
+		}
+
+		if *verboseFlag {
+			log.Printf("filename regexp matched %d files\n", len(fnames))
+		}
+		post = fnames
+	}
+	return post
+}
+
 func Main() {
 	g := regexp.Grep{
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
 	g.AddFlags()
+
+	g2 := regexp.Grep{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	g2.AddFlags()
 
 	flag.Usage = usage
 	flag.Parse()
@@ -89,6 +132,8 @@ func Main() {
 		log.Fatal(err)
 	}
 	g.Regexp = re
+	g2.Regexp = re
+
 	var fre *regexp.Regexp
 	if *fFlag != "" {
 		fre, err = regexp.Compile(*fFlag)
@@ -96,46 +141,33 @@ func Main() {
 			log.Fatal(err)
 		}
 	}
-	q := index.RegexpQuery(re.Syntax)
+	q := query.RegexpQuery(re.Syntax)
 	if *verboseFlag {
 		log.Printf("query: %s\n", q)
 	}
 
 	ix := index.Open(index.File())
 	ix.Verbose = *verboseFlag
-	var post []uint32
-	if *bruteFlag {
-		post = ix.PostingQuery(&index.Query{Op: index.QAll})
-	} else {
-		post = ix.PostingQuery(q)
-	}
-	if *verboseFlag {
-		log.Printf("post query identified %d possible files\n", len(post))
-	}
 
-	if fre != nil {
-		fnames := make([]uint32, 0, len(post))
+	ix2 := index2.Open(index2.File())
+	ix2.Verbose = *verboseFlag
 
-		for _, fileid := range post {
-			name := ix.Name(fileid)
-			if fre.MatchString(name, true, true) < 0 {
-				continue
-			}
-			fnames = append(fnames, fileid)
-		}
+	post := runQuery(ix, q, fre)
+	post2 := runQuery(ix2, q, fre)
 
-		if *verboseFlag {
-			log.Printf("filename regexp matched %d files\n", len(fnames))
-		}
-		post = fnames
-	}
-
-	for _, fileid := range post {
+	for i, fileid := range post {
 		name := ix.Name(fileid)
+		log.Printf("%d (%d) %q", i, fileid, name)
 		g.File(name)
 	}
 
-	matches = g.Match
+	for i, fileid := range post2 {
+		name := ix2.Name(fileid)
+		log.Printf("%d (%d) %q", i, fileid, name)
+		g2.File(name)
+	}
+
+	matches = g.Match || g2.Match
 }
 
 func main() {

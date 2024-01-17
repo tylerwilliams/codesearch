@@ -17,6 +17,13 @@ import (
 	"github.com/google/codesearch/sparse"
 )
 
+var (
+	listMatchesOnly = flag.Bool("l", false, "list matching files only")
+	matchCountsOnly = flag.Bool("c", false, "print match counts only")
+	showLineNumbers = flag.Bool("n", false, "show line numbers")
+	omitFileNames   = flag.Bool("h", false, "omit file names")
+)
+
 // A matcher holds the state for running regular expression search.
 type matcher struct {
 	prog      *syntax.Prog       // compiled program
@@ -365,10 +372,10 @@ type Grep struct {
 }
 
 func (g *Grep) AddFlags() {
-	flag.BoolVar(&g.L, "l", false, "list matching files only")
-	flag.BoolVar(&g.C, "c", false, "print match counts only")
-	flag.BoolVar(&g.N, "n", false, "show line numbers")
-	flag.BoolVar(&g.H, "h", false, "omit file names")
+	g.L = *listMatchesOnly
+	g.C = *matchCountsOnly
+	g.N = *showLineNumbers
+	g.H = *omitFileNames
 }
 
 func (g *Grep) File(name string) {

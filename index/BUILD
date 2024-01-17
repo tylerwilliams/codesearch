@@ -8,12 +8,14 @@ go_library(
         "mmap_linux.go",
         "mmap_windows.go",
         "read.go",
-        "regexp.go",
         "write.go",
     ],
     importpath = "github.com/google/codesearch/index",
     visibility = ["//visibility:public"],
-    deps = ["//sparse"],
+    deps = [
+        "//query",
+        "//sparse",
+    ],
 )
 
 go_test(
@@ -21,7 +23,6 @@ go_test(
     srcs = [
         "merge_test.go",
         "read_test.go",
-        "regexp_test.go",
         "write_test.go",
     ],
     embed = [":index"],
