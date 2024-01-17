@@ -70,6 +70,12 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
         version = "v1.0.1",
     )
     go_repository(
+        name = "com_github_bits_and_blooms_bitset",
+        importpath = "github.com/bits-and-blooms/bitset",
+        sum = "h1:U/q1fAF7xXRhFCrhROzIfffYnu+dlS38vCZtmFVPHmA=",
+        version = "v1.12.0",
+    )
+    go_repository(
         name = "com_github_boombuler_barcode",
         importpath = "github.com/boombuler/barcode",
         sum = "h1:NDBbPmhS+EqABEs5Kg3n/5ZNjy73Pz7SIV+KCeqyXcs=",
@@ -155,6 +161,7 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
     )
     go_repository(
         name = "com_github_cockroachdb_errors",
+        build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/errors",
         sum = "h1:A5+txlVZfOqFBDa4mGz2bUWSp0aHElvHX2bKkdbQu+Y=",
         version = "v1.8.1",
@@ -1012,6 +1019,12 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
         version = "v1.0.0",
     )
     go_repository(
+        name = "com_github_mschoch_smat",
+        importpath = "github.com/mschoch/smat",
+        sum = "h1:8imxQsjDm8yFEAVBe7azKmKSgzSkZXDuKkSq9374khM=",
+        version = "v0.2.0",
+    )
+    go_repository(
         name = "com_github_mwitkow_go_conntrack",
         importpath = "github.com/mwitkow/go-conntrack",
         sum = "h1:KUppIJq7/+SVif2QVs3tOP0zanoHgBEVAwHxUSIzRqU=",
@@ -1136,6 +1149,12 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
         importpath = "github.com/prometheus/tsdb",
         sum = "h1:YZcsG11NqnK4czYLrWd9mpEuAJIHVQLwdrleYfszMAA=",
         version = "v0.7.1",
+    )
+    go_repository(
+        name = "com_github_roaringbitmap_roaring",
+        importpath = "github.com/RoaringBitmap/roaring",
+        sum = "h1:OZF303tJCER1Tj3x+aArx/S5X7hrT186ri6JjrGvG68=",
+        version = "v1.7.0",
     )
     go_repository(
         name = "com_github_rogpeppe_fastuuid",
