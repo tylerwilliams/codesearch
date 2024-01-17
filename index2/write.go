@@ -86,11 +86,11 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 	filenameKey := []byte(filenamePrefix + digest)
 	_, closer, err := iw.db.Get(filenameKey)
 	if err != pebble.ErrNotFound {
-		log.Printf("File %q already indexed!!!", name)
+		// log.Printf("File %q already indexed!!!", name)
 		closer.Close()
 		return
 	}
-	log.Printf("Indexing file %q hash: %s id: %d", name, filenameKey, fileid)
+	// log.Printf("Indexing file %q hash: %s id: %d", name, filenameKey, fileid)
 	f.Seek(0, 0)
 
 	iw.trigram.Reset()
