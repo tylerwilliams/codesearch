@@ -2,6 +2,7 @@ package index2
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -75,6 +76,26 @@ func (ix *Index) NameBytes(fileid uint32) []byte {
 	return buf
 }
 
+func (ix *Index) allIndexedFiles() []uint32 {
+	iter := ix.db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte(filenamePrefix),
+		UpperBound: []byte(filenamePrefix + string('\xff')),
+	})
+	defer iter.Close()
+
+	found := make([]uint32, 0)
+	for iter.First(); iter.Valid(); iter.Next() {
+		digest := bytes.TrimPrefix(iter.Key(), []byte(filenamePrefix))
+		hashSum, err := hex.DecodeString(string(digest))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fileid := bytesToUint32(hashSum[:4])
+		found = append(found, fileid)
+	}
+	return found
+}
+
 func (ix *Index) PostingList(trigram uint32) []uint32 {
 	return ix.postingList(trigram, nil)
 }
@@ -134,12 +155,7 @@ func (ix *Index) postingQuery(q *query.Query, restrict []uint32) (ret []uint32) 
 		if restrict != nil {
 			return restrict
 		}
-		log.Fatalf("QAll NOT SUPPORTED")
-		//		list = make([]uint32, ix.numName)
-		//		for i := range list {
-		//			list[i] = uint32(i)
-		//		}
-		//		return list
+		list = ix.allIndexedFiles()
 	case query.QAnd:
 		for _, t := range q.Trigram {
 			tri := uint32(t[0])<<16 | uint32(t[1])<<8 | uint32(t[2])

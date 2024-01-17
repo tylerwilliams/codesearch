@@ -155,15 +155,13 @@ func Main() {
 	post := runQuery(ix, q, fre)
 	post2 := runQuery(ix2, q, fre)
 
-	for i, fileid := range post {
+	for _, fileid := range post {
 		name := ix.Name(fileid)
-		log.Printf("%d (%d) %q", i, fileid, name)
 		g.File(name)
 	}
 
-	for i, fileid := range post2 {
+	for _, fileid := range post2 {
 		name := ix2.Name(fileid)
-		log.Printf("%d (%d) %q", i, fileid, name)
 		g2.File(name)
 	}
 

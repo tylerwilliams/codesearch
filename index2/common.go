@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"log"
 	"math"
-	
+
 	"github.com/cockroachdb/pebble"
 )
 
@@ -15,10 +15,10 @@ const (
 )
 
 func trigramToBytes(tv uint32) []byte {
-       l := byte((tv >> 16) & 255)
-       m := byte((tv >> 8) & 255)
-       r := byte(tv & 255)
-       return []byte{l,m,r}
+	l := byte((tv >> 16) & 255)
+	m := byte((tv >> 8) & 255)
+	r := byte(tv & 255)
+	return []byte{l, m, r}
 }
 
 func uint32ToBytes(i uint32) []byte {
@@ -32,16 +32,16 @@ func bytesToUint32(buf []byte) uint32 {
 }
 
 func printDB(db *pebble.DB) {
-       iter := db.NewIter(&pebble.IterOptions{
-               LowerBound: []byte{0},
-               UpperBound: []byte{math.MaxUint8},
-       })
-       defer iter.Close()
-       log.Printf("<BEGIN DB>")
-       for iter.First(); iter.Valid(); iter.Next() {
-               log.Printf("\tkey: %q len(val): %d\n", string(iter.Key()), len(iter.Value()))
-       }
-       log.Printf("<END DB>")
+	iter := db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{0},
+		UpperBound: []byte{math.MaxUint8},
+	})
+	defer iter.Close()
+	log.Printf("<BEGIN DB>")
+	for iter.First(); iter.Valid(); iter.Next() {
+		log.Printf("\tkey: %q len(val): %d\n", string(iter.Key()), len(iter.Value()))
+	}
+	log.Printf("<END DB>")
 }
 
 // validUTF8 reports whether the byte pair can appear in a
@@ -60,4 +60,3 @@ func validUTF8(c1, c2 uint32) bool {
 	}
 	return false
 }
-
