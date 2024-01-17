@@ -140,6 +140,8 @@ func (ix *Index) uvarint(off uint32) uint32 {
 	return uint32(v)
 }
 
+func (ix *Index) Close() {}
+
 // Paths returns the list of indexed paths.
 func (ix *Index) Paths() []string {
 	off := ix.pathData

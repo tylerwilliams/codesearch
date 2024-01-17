@@ -59,18 +59,46 @@ var (
 	resetFlag   = flag.Bool("reset", false, "discard existing index")
 	verboseFlag = flag.Bool("verbose", false, "print extra information")
 	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
+	v2          = flag.Bool("v2", true, "use index2 (pebble)")
 )
+
+type indexReader interface {
+	Paths() []string
+	Close()
+}
+
+type indexWriter interface {
+	AddPaths([]string)
+	AddFile(string)
+	Flush()
+}
+
+func printPaths() {
+	var ix indexReader
+	if *v2 {
+		ix = index2.Open(index2.File())
+	} else {
+		ix = index.Open(index.File())
+	}
+	for _, arg := range ix.Paths() {
+		fmt.Printf("%s\n", arg)
+	}
+	ix.Close()
+}
 
 func main() {
 	flag.Usage = usage
 	flag.Parse()
 	args := flag.Args()
 
+	if *v2 {
+		log.Printf("Using pebble!")
+	} else {
+		log.Printf("Using old-file-based-index")
+	}
+
 	if *listFlag {
-		ix := index.Open(index.File())
-		for _, arg := range ix.Paths() {
-			fmt.Printf("%s\n", arg)
-		}
+		printPaths()
 		return
 	}
 
@@ -84,15 +112,15 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	if *resetFlag && len(args) == 0 {
-		os.Remove(index.File())
-		return
+	if *resetFlag {
+		if *v2 {
+			os.RemoveAll(index2.File())
+		} else {
+			os.RemoveAll(index.File())
+		}
 	}
 	if len(args) == 0 {
-		ix := index.Open(index.File())
-		for _, arg := range ix.Paths() {
-			args = append(args, arg)
-		}
+		printPaths()
 	}
 
 	// Translate paths to absolute paths so that we can
@@ -112,6 +140,7 @@ func main() {
 		args = args[1:]
 	}
 
+	// what the shit
 	master := index.File()
 	if _, err := os.Stat(master); err != nil {
 		// Does not exist.
@@ -122,13 +151,17 @@ func main() {
 		file += "~"
 	}
 
-	ix := index.Create(file)
-	ix.Verbose = *verboseFlag
+	var ix indexWriter
+	if *v2 {
+		i := index2.Create(index2.File())
+		i.Verbose = *verboseFlag
+		ix = i
+	} else {
+		i := index.Create(file)
+		i.Verbose = *verboseFlag
+		ix = i
+	}
 	ix.AddPaths(args)
-
-	ix2 := index2.Create(index2.File())
-	ix2.Verbose = *verboseFlag
-	ix2.AddPaths(args)
 
 	for _, arg := range args {
 		log.Printf("index %s", arg)
@@ -148,16 +181,14 @@ func main() {
 			}
 			if info != nil && info.Mode()&os.ModeType == 0 {
 				ix.AddFile(path)
-				ix2.AddFile(path)
 			}
 			return nil
 		})
 	}
 	log.Printf("flush index")
 	ix.Flush()
-	ix2.Flush()
 
-	if !*resetFlag {
+	if !*resetFlag && !*v2 {
 		log.Printf("merge %s %s", master, file)
 		index.Merge(file+"~", master, file)
 		os.Remove(file)

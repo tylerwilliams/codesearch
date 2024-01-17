@@ -76,6 +76,17 @@ func (ix *Index) NameBytes(fileid uint32) []byte {
 	return buf
 }
 
+// Paths returns the list of indexed paths.
+func (ix *Index) Paths() []string {
+	fileIDs := ix.allIndexedFiles()
+	names := make([]string, 0, len(fileIDs))
+
+	for _, fileID := range fileIDs {
+		names = append(names, ix.Name(fileID))
+	}
+	return names
+}
+
 func (ix *Index) allIndexedFiles() []uint32 {
 	iter := ix.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte(filenamePrefix),
