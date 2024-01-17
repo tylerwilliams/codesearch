@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/google/codesearch/index"
+	"github.com/google/codesearch/index2"
 )
 
 var usageMessage = `usage: cindex [-list] [-reset] [path...]
@@ -124,6 +125,11 @@ func main() {
 	ix := index.Create(file)
 	ix.Verbose = *verboseFlag
 	ix.AddPaths(args)
+
+	ix2 := index2.Create(index2.File())
+	ix2.Verbose = *verboseFlag
+	ix2.AddPaths(args)
+	
 	for _, arg := range args {
 		log.Printf("index %s", arg)
 		filepath.Walk(arg, func(path string, info os.FileInfo, err error) error {
@@ -142,13 +148,15 @@ func main() {
 			}
 			if info != nil && info.Mode()&os.ModeType == 0 {
 				ix.AddFile(path)
+				ix2.AddFile(path)
 			}
 			return nil
 		})
 	}
 	log.Printf("flush index")
 	ix.Flush()
-
+	ix2.Flush()
+	
 	if !*resetFlag {
 		log.Printf("merge %s %s", master, file)
 		index.Merge(file+"~", master, file)
