@@ -53,7 +53,7 @@ var (
 	verboseFlag = flag.Bool("verbose", false, "print extra information")
 	bruteFlag   = flag.Bool("brute", false, "brute force - search all files in index")
 	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
-	matches bool
+	matches     bool
 )
 
 type iindex interface {

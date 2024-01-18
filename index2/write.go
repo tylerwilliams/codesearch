@@ -7,11 +7,21 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
+	"sync"
+	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/cockroachdb/pebble"
 	"github.com/google/codesearch/sparse"
+	"golang.org/x/sync/errgroup"
 )
+
+// An mmapData is mmap'ed read-only data from a file.
+type mmapData struct {
+	f *os.File
+	d []byte
+}
 
 type IndexWriter struct {
 	db *pebble.DB
@@ -22,8 +32,11 @@ type IndexWriter struct {
 	inbuf      []byte // input buffer
 	totalBytes int64
 
-	trigram      *sparse.Set // trigrams for the current file
-	postingLists map[uint32]*roaring.Bitmap
+	trigram        *sparse.Set // trigrams for the current file
+	post           []postEntry // list of (trigram, file#) pairs
+	postFile       []*os.File  // flushed post entries
+	postingLists   map[uint32]*roaring.Bitmap
+	filesProcessed int
 }
 
 // Tuning constants for detecting text files.
@@ -35,7 +48,24 @@ const (
 	maxFileLen      = 1 << 30
 	maxLineLen      = 2000
 	maxTextTrigrams = 20000
+
+	npost = 64 << 20 / 8 // 64 MB worth of post entries
 )
+
+// A postEntry is an in-memory (trigram, file#) pair.
+type postEntry uint64
+
+func (p postEntry) trigram() uint32 {
+	return uint32(p >> 32)
+}
+
+func (p postEntry) fileid() uint32 {
+	return uint32(p)
+}
+
+func makePostEntry(trigram, fileid uint32) postEntry {
+	return postEntry(trigram)<<32 | postEntry(fileid)
+}
 
 // Create returns a new IndexWriter that will write the index to file.
 func Create(pebbleDir string) *IndexWriter {
@@ -46,10 +76,10 @@ func Create(pebbleDir string) *IndexWriter {
 	}
 	//printDB(db)
 	return &IndexWriter{
-		db:           db,
-		trigram:      sparse.NewSet(1 << 24),
-		postingLists: make(map[uint32]*roaring.Bitmap),
-		inbuf:        make([]byte, 16384),
+		db:      db,
+		trigram: sparse.NewSet(1 << 24),
+		post:    make([]postEntry, 0, npost),
+		inbuf:   make([]byte, 16384),
 	}
 }
 
@@ -71,28 +101,38 @@ func (iw *IndexWriter) AddFile(name string) {
 	iw.Add(name, f)
 }
 
-// Add adds the file f to the index under the given name.
-// It logs errors using package log.
-func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
+func (iw *IndexWriter) hashFile(f io.ReadSeeker) []byte {
 	// Compute the SHA256 hash of the file.
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		log.Fatal(err)
 	}
-	hashSum := h.Sum(nil)
-	digest := fmt.Sprintf("%x", hashSum)
+	return h.Sum(nil)
+}
 
-	fileid := bytesToUint32(hashSum[:4])
-	filenameKey := []byte(filenamePrefix + digest)
+func (iw *IndexWriter) fileExists(fileDigest string) bool {
+	filenameKey := []byte(filenamePrefix + fileDigest)
 	_, closer, err := iw.db.Get(filenameKey)
 	if err != pebble.ErrNotFound {
-		// log.Printf("File %q already indexed!!!", name)
+		//log.Printf("File %q already indexed!!!", fileDigest)
 		closer.Close()
+		return true
+	}
+	return false
+}
+
+// Add adds the file f to the index under the given name.
+// It logs errors using package log.
+func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
+	hashSum := iw.hashFile(f)
+	digest := fmt.Sprintf("%x", hashSum)
+	fileid := bytesToUint32(hashSum[:4])
+
+	if iw.fileExists(digest) {
 		return
 	}
-	// log.Printf("Indexing file %q hash: %s id: %d", name, filenameKey, fileid)
-	f.Seek(0, 0)
 
+	f.Seek(0, 0)
 	iw.trigram.Reset()
 	var (
 		c       = byte(0)
@@ -161,20 +201,19 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 	}
 
 	for _, trigram := range iw.trigram.Dense() {
-		pl, ok := iw.postingLists[trigram]
-		if !ok {
-			pl = roaring.New()
-			iw.postingLists[trigram] = pl
+		if len(iw.post) >= cap(iw.post) {
+			iw.flushPost()
 		}
-		pl.Add(fileid)
+		iw.post = append(iw.post, makePostEntry(trigram, fileid))
 	}
+
+	filenameKey := []byte(filenamePrefix + digest)
 	if err := iw.db.Set(filenameKey, []byte(name), pebble.NoSync); err != nil {
 		log.Fatal(err)
 	}
-	dataKey := []byte(dataPrefix + digest)
-	if err := iw.db.Set(dataKey, []byte(buf), pebble.NoSync); err != nil {
-		log.Fatal(err)
-	}
+
+	iw.filesProcessed += 1
+	log.Printf("iw.filesProcessed: %d", iw.filesProcessed)
 }
 
 func (iw *IndexWriter) Close() {
@@ -184,18 +223,290 @@ func (iw *IndexWriter) Close() {
 }
 
 func (iw *IndexWriter) Flush() {
-	for trigram, pl := range iw.postingLists {
-		pl.RunOptimize()
-		trigramKey := append([]byte(trigramPrefix), trigramToBytes(trigram)...)
+	iw.mergePost()
+	if err := iw.db.Flush(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// flushPost writes iw.post to a new temporary file and
+// clears the slice.
+func (iw *IndexWriter) flushPost() {
+	w, err := os.CreateTemp("", "csearch-index")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if iw.Verbose {
+		log.Printf("flush %d entries to %s", len(iw.post), w.Name())
+	}
+	sortPost(iw.post)
+
+	// Write the raw iw.post array to disk as is.
+	// This process is the one reading it back in, so byte order is not a concern.
+	data := (*[npost * 8]byte)(unsafe.Pointer(&iw.post[0]))[:len(iw.post)*8]
+	if n, err := w.Write(data); err != nil || n < len(data) {
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Fatalf("short write writing %s", w.Name())
+	}
+
+	iw.post = iw.post[:0]
+	w.Seek(0, 0)
+	iw.postFile = append(iw.postFile, w)
+}
+
+// mergePost reads the flushed index entries and merges them
+// into posting lists, writing the resulting lists to out.
+func (iw *IndexWriter) mergePost() {
+	var h postHeap
+
+	log.Printf("merge %d files + mem", len(iw.postFile))
+	for _, f := range iw.postFile {
+		h.addFile(f)
+	}
+	sortPost(iw.post)
+	h.addMem(iw.post)
+
+	e := h.next()
+
+	mu := sync.Mutex{}
+	batch := iw.db.NewBatch()
+
+	flushBatch := func() {
+		if batch.Empty() {
+			return
+		}
+		if err := batch.Commit(pebble.Sync); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("flushed batch")
+		batch = iw.db.NewBatch()
+	}
+
+	eg := new(errgroup.Group)
+	eg.SetLimit(runtime.GOMAXPROCS(0))
+	writeDocIDs := func(key []byte, ids []uint32) {
 		buf := new(bytes.Buffer)
+		pl := roaring.BitmapOf(ids...)
 		if _, err := pl.WriteTo(buf); err != nil {
 			log.Fatal(err)
 		}
-		if err := iw.db.Set(trigramKey, buf.Bytes(), pebble.NoSync); err != nil {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := batch.Set(key, buf.Bytes(), nil); err != nil {
 			log.Fatal(err)
 		}
+		if batch.Len() >= 64<<20 {
+			flushBatch()
+		}
 	}
-	if err := iw.db.Flush(); err != nil {
-		log.Fatal(err)
+
+	npost := 0
+	for {
+		trigram := e.trigram()
+
+		// posting list
+		npost++
+		nfile := uint32(0)
+		docIDs := make([]uint32, 0, 3)
+
+		trigramKey := append([]byte(trigramPrefix), trigramToBytes(trigram)...)
+		for ; e.trigram() == trigram && trigram != 1<<24-1; e = h.next() {
+			docIDs = append(docIDs, e.fileid())
+			nfile++
+		}
+		eg.Go(func() error {
+			writeDocIDs(trigramKey, docIDs)
+			return nil
+		})
+
+		if trigram == 1<<24-1 {
+			break
+		}
+	}
+	eg.Wait()
+	flushBatch()
+	log.Printf("Wrote %d posting lists", npost)
+}
+
+// A postChunk represents a chunk of post entries flushed to disk or
+// still in memory.
+type postChunk struct {
+	e postEntry   // next entry
+	m []postEntry // remaining entries after e
+}
+
+const postBuf = 4096
+
+// A postHeap is a heap (priority queue) of postChunks.
+type postHeap struct {
+	ch []*postChunk
+}
+
+func (h *postHeap) addFile(f *os.File) {
+	data := mmapFile(f).d
+	m := (*[npost]postEntry)(unsafe.Pointer(&data[0]))[:len(data)/8]
+	h.addMem(m)
+}
+
+func (h *postHeap) addMem(x []postEntry) {
+	h.add(&postChunk{m: x})
+}
+
+// step reads the next entry from ch and saves it in ch.e.
+// It returns false if ch is over.
+func (h *postHeap) step(ch *postChunk) bool {
+	old := ch.e
+	m := ch.m
+	if len(m) == 0 {
+		return false
+	}
+	ch.e = postEntry(m[0])
+	m = m[1:]
+	ch.m = m
+	if old >= ch.e {
+		panic("bad sort")
+	}
+	return true
+}
+
+// add adds the chunk to the postHeap.
+// All adds must be called before the first call to next.
+func (h *postHeap) add(ch *postChunk) {
+	if len(ch.m) > 0 {
+		ch.e = ch.m[0]
+		ch.m = ch.m[1:]
+		h.push(ch)
+	}
+}
+
+// empty reports whether the postHeap is empty.
+func (h *postHeap) empty() bool {
+	return len(h.ch) == 0
+}
+
+// next returns the next entry from the postHeap.
+// It returns a postEntry with trigram == 1<<24 - 1 if h is empty.
+func (h *postHeap) next() postEntry {
+	if len(h.ch) == 0 {
+		return makePostEntry(1<<24-1, 0)
+	}
+	ch := h.ch[0]
+	e := ch.e
+	m := ch.m
+	if len(m) == 0 {
+		h.pop()
+	} else {
+		ch.e = m[0]
+		ch.m = m[1:]
+		h.siftDown(0)
+	}
+	return e
+}
+
+func (h *postHeap) pop() *postChunk {
+	ch := h.ch[0]
+	n := len(h.ch) - 1
+	h.ch[0] = h.ch[n]
+	h.ch = h.ch[:n]
+	if n > 1 {
+		h.siftDown(0)
+	}
+	return ch
+}
+
+func (h *postHeap) push(ch *postChunk) {
+	n := len(h.ch)
+	h.ch = append(h.ch, ch)
+	if len(h.ch) >= 2 {
+		h.siftUp(n)
+	}
+}
+
+func (h *postHeap) siftDown(i int) {
+	ch := h.ch
+	for {
+		j1 := 2*i + 1
+		if j1 >= len(ch) {
+			break
+		}
+		j := j1
+		if j2 := j1 + 1; j2 < len(ch) && ch[j1].e >= ch[j2].e {
+			j = j2
+		}
+		if ch[i].e < ch[j].e {
+			break
+		}
+		ch[i], ch[j] = ch[j], ch[i]
+		i = j
+	}
+}
+
+func (h *postHeap) siftUp(j int) {
+	ch := h.ch
+	for {
+		i := (j - 1) / 2
+		if i == j || ch[i].e < ch[j].e {
+			break
+		}
+		ch[i], ch[j] = ch[j], ch[i]
+		j = i
+	}
+}
+
+// sortPost sorts the postentry list.
+// The list is already sorted by fileid (bottom 32 bits)
+// and the top 8 bits are always zero, so there are only
+// 24 bits to sort.  Run two rounds of 12-bit radix sort.
+const sortK = 12
+
+var sortTmp []postEntry
+var sortN [1 << sortK]int
+
+func sortPost(post []postEntry) {
+	if len(post) > len(sortTmp) {
+		sortTmp = make([]postEntry, len(post))
+	}
+	tmp := sortTmp[:len(post)]
+
+	const k = sortK
+	for i := range sortN {
+		sortN[i] = 0
+	}
+	for _, p := range post {
+		r := uintptr(p>>32) & (1<<k - 1)
+		sortN[r]++
+	}
+	tot := 0
+	for i, count := range sortN {
+		sortN[i] = tot
+		tot += count
+	}
+	for _, p := range post {
+		r := uintptr(p>>32) & (1<<k - 1)
+		o := sortN[r]
+		sortN[r]++
+		tmp[o] = p
+	}
+	tmp, post = post, tmp
+
+	for i := range sortN {
+		sortN[i] = 0
+	}
+	for _, p := range post {
+		r := uintptr(p>>(32+k)) & (1<<k - 1)
+		sortN[r]++
+	}
+	tot = 0
+	for i, count := range sortN {
+		sortN[i] = tot
+		tot += count
+	}
+	for _, p := range post {
+		r := uintptr(p>>(32+k)) & (1<<k - 1)
+		o := sortN[r]
+		sortN[r]++
+		tmp[o] = p
 	}
 }

@@ -1285,8 +1285,8 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
     go_repository(
         name = "com_github_stretchr_objx",
         importpath = "github.com/stretchr/objx",
-        sum = "h1:2vfRuCMp5sSVIDSqO8oNnWJq7mPa6KVP3iPIwFBuy8A=",
-        version = "v0.1.1",
+        sum = "h1:4G4v2dO3VZwixGIRoQ5Lfboy6nUhCyYzaqnIAPPhYs4=",
+        version = "v0.1.0",
     )
     go_repository(
         name = "com_github_stretchr_testify",
@@ -1447,8 +1447,8 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
     go_repository(
         name = "in_gopkg_check_v1",
         importpath = "gopkg.in/check.v1",
-        sum = "h1:BLraFXnmrev5lT+xlilqcH8XK9/i0At2xKjWk4p6zsU=",
-        version = "v1.0.0-20200227125254-8fa46927fb4f",
+        sum = "h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=",
+        version = "v0.0.0-20161208181325-20d25e280405",
     )
     go_repository(
         name = "in_gopkg_errgo_v2",

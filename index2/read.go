@@ -115,7 +115,7 @@ func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) *roarin
 	trigramKey := append([]byte(trigramPrefix), trigramToBytes(trigram)...)
 	buf, closer, err := ix.db.Get(trigramKey)
 	if err == pebble.ErrNotFound {
-		return nil
+		return roaring.NewBitmap()
 	} else if err != nil {
 		log.Fatal(err)
 	}
@@ -224,8 +224,4 @@ func mergeOr(l1, l2 []uint32) []uint32 {
 		}
 	}
 	return l
-}
-
-func corrupt() {
-	log.Fatal("corrupt index: remove " + File())
 }

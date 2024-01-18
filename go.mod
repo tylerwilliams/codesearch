@@ -1,6 +1,6 @@
 module github.com/google/codesearch
 
-go 1.13
+go 1.21
 
 require (
 	github.com/RoaringBitmap/roaring v1.7.0 // indirect

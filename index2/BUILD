@@ -4,6 +4,9 @@ go_library(
     name = "index2",
     srcs = [
         "common.go",
+        "mmap_bsd.go",
+        "mmap_linux.go",
+        "mmap_windows.go",
         "read.go",
         "write.go",
     ],
@@ -14,6 +17,7 @@ go_library(
         "//sparse",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_roaringbitmap_roaring//:roaring",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
