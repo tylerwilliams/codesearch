@@ -197,7 +197,7 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 	iw.totalBytes += n
 
 	if iw.Verbose {
-		log.Printf("%d %d %s\n", n, iw.trigram.Len(), name)
+		log.Printf("%d %d %s id %d (%q)\n", n, iw.trigram.Len(), name, fileid, digest)
 	}
 
 	for _, trigram := range iw.trigram.Dense() {

@@ -129,13 +129,17 @@ func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) *roarin
 		resultSet = roaring.Or(resultSet, postingList)
 		postingList.Clear()
 	}
-	resultSet.AndNot(restrict)
+	if !restrict.IsEmpty() {
+		resultSet.And(restrict)
+	}
 	return resultSet
 }
 
 func (ix *Index) postingList(trigram uint32, restrict []uint32) []uint32 {
 	bm := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
-	return bm.ToArray()
+	x := bm.ToArray()
+	//log.Printf("postinglist(%+v, restrict: %+v) => %+v", trigramToBytes(trigram), restrict, x)
+	return x
 }
 
 func (ix *Index) PostingAnd(list []uint32, trigram uint32) []uint32 {
@@ -145,7 +149,9 @@ func (ix *Index) PostingAnd(list []uint32, trigram uint32) []uint32 {
 func (ix *Index) postingAnd(list []uint32, trigram uint32, restrict []uint32) []uint32 {
 	bm := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
 	bm.And(roaring.BitmapOf(list...))
-	return bm.ToArray()
+	x := bm.ToArray()
+	//log.Printf("postingAnd(..., %+v, restrict: %+v) => %+v", trigramToBytes(trigram), restrict, x)
+	return x
 }
 
 func (ix *Index) PostingOr(list []uint32, trigram uint32) []uint32 {
@@ -155,7 +161,9 @@ func (ix *Index) PostingOr(list []uint32, trigram uint32) []uint32 {
 func (ix *Index) postingOr(list []uint32, trigram uint32, restrict []uint32) []uint32 {
 	bm := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
 	bm.Or(roaring.BitmapOf(list...))
-	return bm.ToArray()
+	x := bm.ToArray()
+	//log.Printf("postingOr(%+v, %+v, restrict: %+v) => %+v", list, trigramToBytes(trigram), restrict, x)
+	return x
 }
 
 func (ix *Index) PostingQuery(q *query.Query) []uint32 {

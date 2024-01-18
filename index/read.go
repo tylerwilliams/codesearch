@@ -285,6 +285,7 @@ func (ix *Index) postingList(trigram uint32, restrict []uint32) []uint32 {
 	for r.next() {
 		x = append(x, r.fileid)
 	}
+	//log.Printf("postinglist(%+v, restrict: %+v) => %+v", trigramToBytes(trigram), restrict, x)
 	return x
 }
 
@@ -307,6 +308,7 @@ func (ix *Index) postingAnd(list []uint32, trigram uint32, restrict []uint32) []
 			i++
 		}
 	}
+	//log.Printf("postingAnd(..., %+v, restrict: %+v) => %+v", trigramToBytes(trigram), restrict, x)
 	return x
 }
 
@@ -331,7 +333,19 @@ func (ix *Index) postingOr(list []uint32, trigram uint32, restrict []uint32) []u
 		}
 	}
 	x = append(x, list[i:]...)
+	//log.Printf("postingOr(%+v, %+v, restrict: %+v) => %+v", list, trigramToBytes(trigram), restrict, x)
 	return x
+}
+
+func trigramToBytes(tv uint32) []byte {
+	l := byte((tv >> 16) & 255)
+	m := byte((tv >> 8) & 255)
+	r := byte(tv & 255)
+	return []byte{l, m, r}
+}
+
+func trigramToString(tv uint32) string {
+	return string(trigramToBytes(tv))
 }
 
 func (ix *Index) PostingQuery(q *query.Query) []uint32 {

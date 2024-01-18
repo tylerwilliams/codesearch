@@ -69,7 +69,7 @@ func runQuery(ix iindex, q *query.Query, fre *regexp.Regexp) []uint32 {
 		post = ix.PostingQuery(q)
 	}
 	if *verboseFlag {
-		log.Printf("post query identified %d possible files\n", len(post))
+		log.Printf("post query identified %d possible files: %d\n", len(post), post)
 	}
 
 	if fre != nil {
