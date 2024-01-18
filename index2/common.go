@@ -2,6 +2,7 @@ package index2
 
 import (
 	"encoding/binary"
+	"flag"
 	"log"
 	"math"
 
@@ -14,11 +15,20 @@ const (
 	trigramPrefix  = "tri:"
 )
 
+var (
+	// TODO(tylerw): set via API instead.
+	repository = flag.String("repo", "", "A repository to index to / filter to")
+)
+
 func trigramToBytes(tv uint32) []byte {
 	l := byte((tv >> 16) & 255)
 	m := byte((tv >> 8) & 255)
 	r := byte(tv & 255)
 	return []byte{l, m, r}
+}
+
+func trigramToString(tv uint32) string {
+	return string(trigramToBytes(tv))
 }
 
 func uint32ToBytes(i uint32) []byte {
@@ -59,4 +69,20 @@ func validUTF8(c1, c2 uint32) bool {
 		return 0x80 <= c2 && c2 < 0xc0
 	}
 	return false
+}
+
+func makeKey(prefix, key string) []byte {
+	return []byte(*repository + prefix + key)
+}
+
+func dataKey(key string) []byte {
+	return makeKey(dataPrefix, key)
+}
+
+func filenameKey(key string) []byte {
+	return makeKey(filenamePrefix, key)
+}
+
+func trigramKey(key string) []byte {
+	return makeKey(trigramPrefix, key)
 }

@@ -61,12 +61,12 @@ func (ix *Index) Name(fileid uint32) string {
 // NameBytes returns the name corresponding to the given fileid.
 func (ix *Index) NameBytes(fileid uint32) []byte {
 	iter := ix.db.NewIter(&pebble.IterOptions{
-		LowerBound: []byte(filenamePrefix),
-		UpperBound: []byte(filenamePrefix + string('\xff')),
+		LowerBound: filenameKey(""),
+		UpperBound: filenameKey(string('\xff')),
 	})
 	defer iter.Close()
 
-	filePrefix := []byte(fmt.Sprintf("%s%x", filenamePrefix, string(uint32ToBytes(fileid))))
+	filePrefix := filenameKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
 	if !iter.SeekGE(filePrefix) || !bytes.HasPrefix(iter.Key(), filePrefix) {
 		log.Fatalf("File %d not found in index (prefix: %q)", fileid, filePrefix)
 		return nil
@@ -89,14 +89,14 @@ func (ix *Index) Paths() []string {
 
 func (ix *Index) allIndexedFiles() []uint32 {
 	iter := ix.db.NewIter(&pebble.IterOptions{
-		LowerBound: []byte(filenamePrefix),
-		UpperBound: []byte(filenamePrefix + string('\xff')),
+		LowerBound: filenameKey(""),
+		UpperBound: filenameKey(string('\xff')),
 	})
 	defer iter.Close()
 
 	found := make([]uint32, 0)
 	for iter.First(); iter.Valid(); iter.Next() {
-		digest := bytes.TrimPrefix(iter.Key(), []byte(filenamePrefix))
+		digest := bytes.TrimPrefix(iter.Key(), filenameKey(""))
 		hashSum, err := hex.DecodeString(string(digest))
 		if err != nil {
 			log.Fatal(err)
@@ -112,20 +112,25 @@ func (ix *Index) PostingList(trigram uint32) []uint32 {
 }
 
 func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) *roaring.Bitmap {
-	trigramKey := append([]byte(trigramPrefix), trigramToBytes(trigram)...)
-	buf, closer, err := ix.db.Get(trigramKey)
-	if err == pebble.ErrNotFound {
-		return roaring.NewBitmap()
-	} else if err != nil {
-		log.Fatal(err)
+	triString := trigramToString(trigram)
+	iter := ix.db.NewIter(&pebble.IterOptions{
+		LowerBound: trigramKey(triString),
+		UpperBound: trigramKey(triString + string('\xff')),
+	})
+	defer iter.Close()
+
+	resultSet := roaring.New()
+	postingList := roaring.New()
+	for iter.First(); iter.Valid(); iter.Next() {
+		//log.Printf("query %q matched key %q", triString, iter.Key())
+		if _, err := postingList.ReadFrom(bytes.NewReader(iter.Value())); err != nil {
+			log.Fatal(err)
+		}
+		resultSet = roaring.Or(resultSet, postingList)
+		postingList.Clear()
 	}
-	defer closer.Close()
-	bm := roaring.New()
-	if _, err := bm.ReadFrom(bytes.NewReader(buf)); err != nil {
-		log.Fatal(err)
-	}
-	bm.AndNot(restrict)
-	return bm
+	resultSet.AndNot(restrict)
+	return resultSet
 }
 
 func (ix *Index) postingList(trigram uint32, restrict []uint32) []uint32 {

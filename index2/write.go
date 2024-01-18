@@ -35,8 +35,9 @@ type IndexWriter struct {
 	trigram        *sparse.Set // trigrams for the current file
 	post           []postEntry // list of (trigram, file#) pairs
 	postFile       []*os.File  // flushed post entries
-	postingLists   map[uint32]*roaring.Bitmap
 	filesProcessed int
+
+	repoID []byte // TODO(tylerw): set this via API instead of hacky
 }
 
 // Tuning constants for detecting text files.
@@ -111,8 +112,7 @@ func (iw *IndexWriter) hashFile(f io.ReadSeeker) []byte {
 }
 
 func (iw *IndexWriter) fileExists(fileDigest string) bool {
-	filenameKey := []byte(filenamePrefix + fileDigest)
-	_, closer, err := iw.db.Get(filenameKey)
+	_, closer, err := iw.db.Get(filenameKey(fileDigest))
 	if err != pebble.ErrNotFound {
 		//log.Printf("File %q already indexed!!!", fileDigest)
 		closer.Close()
@@ -207,8 +207,7 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 		iw.post = append(iw.post, makePostEntry(trigram, fileid))
 	}
 
-	filenameKey := []byte(filenamePrefix + digest)
-	if err := iw.db.Set(filenameKey, []byte(name), pebble.NoSync); err != nil {
+	if err := iw.db.Set(filenameKey(digest), []byte(name), pebble.NoSync); err != nil {
 		log.Fatal(err)
 	}
 
@@ -309,15 +308,15 @@ func (iw *IndexWriter) mergePost() {
 		// posting list
 		npost++
 		nfile := uint32(0)
-		docIDs := make([]uint32, 0, 3)
 
-		trigramKey := append([]byte(trigramPrefix), trigramToBytes(trigram)...)
+		docIDs := make([]uint32, 0, 3)
 		for ; e.trigram() == trigram && trigram != 1<<24-1; e = h.next() {
 			docIDs = append(docIDs, e.fileid())
 			nfile++
 		}
 		eg.Go(func() error {
-			writeDocIDs(trigramKey, docIDs)
+			triString := trigramToString(trigram)
+			writeDocIDs(trigramKey(triString), docIDs)
 			return nil
 		})
 
