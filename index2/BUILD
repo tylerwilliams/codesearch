@@ -16,6 +16,7 @@ go_library(
         "//query",
         "//sparse",
         "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_google_uuid//:uuid",
         "@com_github_roaringbitmap_roaring//:roaring",
         "@org_golang_x_sync//errgroup",
     ],

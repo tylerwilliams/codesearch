@@ -5,4 +5,5 @@ go 1.21
 require (
 	github.com/RoaringBitmap/roaring v1.7.0 // indirect
 	github.com/cockroachdb/pebble v1.0.0 // indirect
+	github.com/google/uuid v1.5.0 // indirect
 )

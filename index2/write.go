@@ -14,6 +14,7 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/cockroachdb/pebble"
 	"github.com/google/codesearch/sparse"
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,7 +38,8 @@ type IndexWriter struct {
 	postFile       []*os.File  // flushed post entries
 	filesProcessed int
 
-	repoID []byte // TODO(tylerw): set this via API instead of hacky
+	repoID    []byte // TODO(tylerw): set this via API instead of hacky
+	segmentID uuid.UUID
 }
 
 // Tuning constants for detecting text files.
@@ -75,12 +77,18 @@ func Create(pebbleDir string) *IndexWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
+	segmentID, err := uuid.NewV7()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("SegmentID is %q", segmentID.String())
 	//printDB(db)
 	return &IndexWriter{
-		db:      db,
-		trigram: sparse.NewSet(1 << 24),
-		post:    make([]postEntry, 0, npost),
-		inbuf:   make([]byte, 16384),
+		db:        db,
+		trigram:   sparse.NewSet(1 << 24),
+		post:      make([]postEntry, 0, npost),
+		inbuf:     make([]byte, 16384),
+		segmentID: segmentID,
 	}
 }
 
@@ -210,6 +218,9 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 	if err := iw.db.Set(filenameKey(digest), []byte(name), pebble.NoSync); err != nil {
 		log.Fatal(err)
 	}
+	if err := iw.db.Set(dataKey(digest), buf, pebble.NoSync); err != nil {
+		log.Fatal(err)
+	}
 
 	iw.filesProcessed += 1
 	log.Printf("iw.filesProcessed: %d", iw.filesProcessed)
@@ -293,6 +304,7 @@ func (iw *IndexWriter) mergePost() {
 		}
 		mu.Lock()
 		defer mu.Unlock()
+		log.Printf("Wrote key: %q", string(key))
 		if err := batch.Set(key, buf.Bytes(), nil); err != nil {
 			log.Fatal(err)
 		}
@@ -302,6 +314,11 @@ func (iw *IndexWriter) mergePost() {
 	}
 
 	npost := 0
+
+	segmentIDBytes, err := iw.segmentID.MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+	}
 	for {
 		trigram := e.trigram()
 
@@ -316,7 +333,8 @@ func (iw *IndexWriter) mergePost() {
 		}
 		eg.Go(func() error {
 			triString := trigramToString(trigram)
-			writeDocIDs(trigramKey(triString), docIDs)
+			triKey := bytes.Join([][]byte{trigramKey(triString), segmentIDBytes}, []byte(":"))
+			writeDocIDs(triKey, docIDs)
 			return nil
 		})
 

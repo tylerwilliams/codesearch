@@ -635,6 +635,13 @@ def install_go_mod_dependencies(workspace_name = "codesearch"):
         version = "v0.0.2",
     )
     go_repository(
+        name = "com_github_google_uuid",
+        importpath = "github.com/google/uuid",
+        sum = "h1:1p67kYwdtXjb0gL0BPiP1Av9wiZPo5A8z2cWkTZ+eyU=",
+        version = "v1.5.0",
+    )
+
+    go_repository(
         name = "com_github_googleapis_gax_go",
         importpath = "github.com/googleapis/gax-go",
         sum = "h1:CYRpN206UTHUinz3VJoLaBdy1gEGeJNsqT0mvswDcMw=",
