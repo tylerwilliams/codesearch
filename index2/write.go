@@ -82,7 +82,6 @@ func Create(pebbleDir string) *IndexWriter {
 		log.Fatal(err)
 	}
 	log.Printf("SegmentID is %q", segmentID.String())
-	//printDB(db)
 	return &IndexWriter{
 		db:        db,
 		trigram:   sparse.NewSet(1 << 24),
@@ -221,6 +220,9 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 	if err := iw.db.Set(dataKey(digest), buf, pebble.NoSync); err != nil {
 		log.Fatal(err)
 	}
+	if err := iw.db.Set(namehashKey(hashString(name)), []byte(digest), pebble.NoSync); err != nil {
+		log.Fatal(err)
+	}
 
 	iw.filesProcessed += 1
 	log.Printf("iw.filesProcessed: %d", iw.filesProcessed)
@@ -304,7 +306,7 @@ func (iw *IndexWriter) mergePost() {
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		log.Printf("Wrote key: %q", string(key))
+
 		if err := batch.Set(key, buf.Bytes(), nil); err != nil {
 			log.Fatal(err)
 		}

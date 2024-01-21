@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/cockroachdb/pebble"
@@ -166,8 +167,54 @@ func (ix *Index) postingOr(list []uint32, trigram uint32, restrict []uint32) []u
 	return x
 }
 
+func (ix *Index) merge(fileids []uint32) []uint32 {
+	filenames := make(map[uint32][]byte)
+
+	fnameIter := ix.db.NewIter(&pebble.IterOptions{
+		LowerBound: filenameKey(""),
+		UpperBound: filenameKey(string('\xff')),
+	})
+	defer fnameIter.Close()
+	sort.Slice(fileids, func(i, j int) bool { return fileids[i] < fileids[j] })
+	for _, fileid := range fileids {
+		filePrefix := filenameKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
+		if !fnameIter.SeekGE(filePrefix) || !bytes.HasPrefix(fnameIter.Key(), filePrefix) {
+			log.Fatalf("File %d not found in index (prefix: %q)", fileid, filePrefix)
+		}
+		buf := make([]byte, len(fnameIter.Value()))
+		copy(buf, fnameIter.Value())
+		filenames[fileid] = buf
+	}
+
+	namehashIter := ix.db.NewIter(&pebble.IterOptions{
+		LowerBound: namehashKey(""),
+		UpperBound: namehashKey(string('\xff')),
+	})
+	defer namehashIter.Close()
+	for fileid, name := range filenames {
+		nameHash := namehashKey(hashString(string(name)))
+		if !namehashIter.SeekGE(nameHash) || !bytes.HasPrefix(namehashIter.Key(), nameHash) {
+			// log.Printf("File %d (%q) not found (deleted?)", fileid, name)
+			delete(filenames, fileid)
+		}
+		filePrefix := []byte(fmt.Sprintf("%x", uint32ToBytes(fileid)))
+		if !bytes.HasPrefix(namehashIter.Value(), filePrefix) {
+			// log.Printf("File %d (%q) hash updated (%q != %q)", fileid, name, string(namehashIter.Value()), string(uint32ToBytes(fileid)))
+			delete(filenames, fileid)
+		}
+	}
+	x := fileids
+	fileids = fileids[:0]
+	for _, fileid := range x {
+		if _, ok := filenames[fileid]; ok {
+			fileids = append(fileids, fileid)
+		}
+	}
+	return fileids
+}
+
 func (ix *Index) PostingQuery(q *query.Query) []uint32 {
-	return ix.postingQuery(q, nil)
+	return ix.merge(ix.postingQuery(q, nil))
 }
 
 func (ix *Index) postingQuery(q *query.Query, restrict []uint32) (ret []uint32) {

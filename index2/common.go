@@ -1,8 +1,10 @@
 package index2
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"flag"
+	"fmt"
 	"log"
 	"math"
 
@@ -13,6 +15,7 @@ const (
 	dataPrefix     = "dat:"
 	filenamePrefix = "fil:"
 	trigramPrefix  = "tri:"
+	namehashPrefix = "nam:"
 )
 
 var (
@@ -71,6 +74,15 @@ func validUTF8(c1, c2 uint32) bool {
 	return false
 }
 
+func hashString(s string) string {
+	// Compute the SHA256 hash of the file.
+	h := sha256.New()
+	if _, err := h.Write([]byte(s)); err != nil {
+		log.Fatal(err)
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 func makeKey(prefix, key string) []byte {
 	return []byte(*repository + prefix + key)
 }
@@ -85,4 +97,8 @@ func filenameKey(key string) []byte {
 
 func trigramKey(key string) []byte {
 	return makeKey(trigramPrefix, key)
+}
+
+func namehashKey(key string) []byte {
+	return makeKey(namehashPrefix, key)
 }
