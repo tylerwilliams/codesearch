@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 
+	"github.com/cockroachdb/pebble"
 	"github.com/google/codesearch/index"
 	"github.com/google/codesearch/query"
 	"github.com/google/codesearch/regexp"
@@ -55,6 +58,19 @@ var (
 	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
 	matches     bool
 )
+
+func indexDir() string {
+	f := os.Getenv("CSEARCHINDEX2")
+	if f != "" {
+		return f
+	}
+	var home string
+	home = os.Getenv("HOME")
+	if runtime.GOOS == "windows" && home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
+	return filepath.Clean(home + "/.csindex")
+}
 
 type iindex interface {
 	PostingQuery(q *query.Query) []uint32
@@ -138,7 +154,12 @@ func Main() {
 		log.Printf("query: %s\n", q)
 	}
 
-	ix := index.Open(index.File())
+	db, err := pebble.Open(indexDir(), &pebble.Options{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ix := index.Open(db)
 	ix.Verbose = *verboseFlag
 
 	post2 := runQuery(ix, q, fre)

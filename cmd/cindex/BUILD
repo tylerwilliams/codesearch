@@ -5,7 +5,10 @@ go_library(
     srcs = ["cindex.go"],
     importpath = "github.com/google/codesearch/cmd/cindex",
     visibility = ["//visibility:private"],
-    deps = ["//index"],
+    deps = [
+        "//index",
+        "@com_github_cockroachdb_pebble//:pebble",
+    ],
 )
 
 go_binary(

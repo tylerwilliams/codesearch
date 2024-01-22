@@ -9,6 +9,7 @@ go_library(
         "//index",
         "//query",
         "//regexp",
+        "@com_github_cockroachdb_pebble//:pebble",
     ],
 )
 

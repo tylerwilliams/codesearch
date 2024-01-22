@@ -10,9 +10,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"sort"
 
+	"github.com/cockroachdb/pebble"
 	"github.com/google/codesearch/index"
 )
 
@@ -71,9 +73,22 @@ type indexWriter interface {
 	Flush()
 }
 
+func indexDir() string {
+	f := os.Getenv("CSEARCHINDEX2")
+	if f != "" {
+		return f
+	}
+	var home string
+	home = os.Getenv("HOME")
+	if runtime.GOOS == "windows" && home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
+	return filepath.Clean(home + "/.csindex")
+}
+
 func printPaths() {
 	var ix indexReader
-	ix = index.Open(index.File())
+	ix = index.Open(indexDir())
 	for _, arg := range ix.Paths() {
 		fmt.Printf("%s\n", arg)
 	}
@@ -103,7 +118,7 @@ func main() {
 	}
 
 	if *resetFlag {
-		os.RemoveAll(index.File())
+		os.RemoveAll(indexDir())
 	}
 	if len(args) == 0 {
 		printPaths()
@@ -126,8 +141,13 @@ func main() {
 		args = args[1:]
 	}
 
+	db, err := pebble.Open(indexDir(), &pebble.Options{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var ix indexWriter
-	i := index.Create(index.File())
+	i := index.Create(db)
 	i.Verbose = *verboseFlag
 	ix = i
 	ix.AddPaths(args)

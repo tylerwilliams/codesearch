@@ -71,12 +71,7 @@ func makePostEntry(trigram, fileid uint32) postEntry {
 }
 
 // Create returns a new IndexWriter that will write the index to file.
-func Create(pebbleDir string) *IndexWriter {
-	log.Printf("Opening pebbleDir %q", pebbleDir)
-	db, err := pebble.Open(pebbleDir, &pebble.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
+func Create(db *pebble.DB) *IndexWriter {
 	sID, err := uuid.NewV7()
 	if err != nil {
 		log.Fatal(err)

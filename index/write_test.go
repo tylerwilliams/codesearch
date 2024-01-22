@@ -83,7 +83,12 @@ func TestTrivialWrite(t *testing.T) {
 	d, _ := os.MkdirTemp("", "test")
 	defer os.RemoveAll(d)
 
-	iw := Create(d)
+	db, err := pebble.Open(d, &pebble.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	iw := Create(db)
 	iw.segmentID = "1"
 	for name, contents := range trivialFiles {
 		iw.Add(name, strings.NewReader(contents))

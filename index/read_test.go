@@ -113,7 +113,12 @@ func TestTrivialPosting(t *testing.T) {
 	defer os.RemoveAll(d)
 
 	writeTestingIndex(t, d)
-	ix := Open(d)
+
+	db, err := pebble.Open(d, &pebble.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix := Open(db)
 	if l := ix.PostingList(tri('S', 'e', 'a')); !equalList(l, []uint32{267523926, 2101109549}) {
 		t.Errorf("PostingList(Sea) = %v, want [267523926 2101109549]", l)
 	}
