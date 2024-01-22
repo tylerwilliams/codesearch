@@ -330,7 +330,7 @@ func (iw *IndexWriter) mergePost() {
 		}
 		eg.Go(func() error {
 			triString := trigramToString(trigram)
-			triKey := append(trigramKey(triString), []byte(":" + iw.segmentID)...)
+			triKey := append(trigramKey(triString), []byte(":"+iw.segmentID)...)
 			writeDocIDs(triKey, docIDs)
 			return nil
 		})
