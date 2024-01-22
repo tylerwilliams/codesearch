@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -97,12 +98,6 @@ func Main() {
 	}
 	g.AddFlags()
 
-	g2 := regexp.Grep{
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
-	g2.AddFlags()
-
 	flag.Usage = usage
 	flag.Parse()
 	args := flag.Args()
@@ -130,7 +125,6 @@ func Main() {
 		log.Fatal(err)
 	}
 	g.Regexp = re
-	g2.Regexp = re
 
 	var fre *regexp.Regexp
 	if *fFlag != "" {
@@ -144,17 +138,18 @@ func Main() {
 		log.Printf("query: %s\n", q)
 	}
 
-	ix2 := index.Open(index.File())
-	ix2.Verbose = *verboseFlag
+	ix := index.Open(index.File())
+	ix.Verbose = *verboseFlag
 
-	post2 := runQuery(ix2, q, fre)
+	post2 := runQuery(ix, q, fre)
 
 	for _, fileid := range post2 {
-		name := ix2.Name(fileid)
-		g2.File(name)
+		name := ix.Name(fileid)
+		r := bytes.NewReader(ix.Contents(fileid))
+		g.Reader(r, name)
 	}
 
-	matches = g.Match || g2.Match
+	matches = g.Match
 }
 
 func main() {

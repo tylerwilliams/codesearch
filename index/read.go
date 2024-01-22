@@ -42,7 +42,7 @@ func Open(pebbleDir string) *Index {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//printDB(db)
+	printDB(db)
 	return &Index{
 		db: db,
 	}
@@ -69,7 +69,24 @@ func (ix *Index) NameBytes(fileid uint32) []byte {
 
 	filePrefix := filenameKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
 	if !iter.SeekGE(filePrefix) || !bytes.HasPrefix(iter.Key(), filePrefix) {
-		log.Fatalf("File %d not found in index (prefix: %q)", fileid, filePrefix)
+		log.Fatalf("File (name) %d not found in index (prefix: %q)", fileid, filePrefix)
+		return nil
+	}
+	buf := make([]byte, len(iter.Value()))
+	copy(buf, iter.Value())
+	return buf
+}
+
+func (ix *Index) Contents(fileid uint32) []byte {
+	iter := ix.db.NewIter(&pebble.IterOptions{
+		LowerBound: dataKey(""),
+		UpperBound: dataKey(string('\xff')),
+	})
+	defer iter.Close()
+
+	filePrefix := dataKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
+	if !iter.SeekGE(filePrefix) || !bytes.HasPrefix(iter.Key(), filePrefix) {
+		log.Fatalf("File (data) %d not found in index (prefix: %q)", fileid, filePrefix)
 		return nil
 	}
 	buf := make([]byte, len(iter.Value()))
