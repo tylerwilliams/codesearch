@@ -11,6 +11,7 @@ load("//rules/go:index.bzl", "go_sdk_tool")
 #
 # Make these the default compilers for proto rules.
 # See https://github.com/bazelbuild/rules_go/pull/3761 for more details
+# gazelle:go_grpc_compilers     @io_bazel_rules_go//proto:go_proto,@io_bazel_rules_go//proto:go_grpc_v2"
 # gazelle:go_proto_compilers	@io_bazel_rules_go//proto:go_proto,@io_bazel_rules_go//proto:go_grpc_v2
 gazelle(
     name = "gazelle",

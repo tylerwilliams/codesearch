@@ -39,6 +39,10 @@ proto_library(
 
 go_proto_library(
     name = "codesearch_service_go_proto",
+    compilers = [
+        "@io_bazel_rules_go//proto:go_proto",
+        "@io_bazel_rules_go//proto:go_grpc_v2",
+    ],
     importpath = "github.com/google/codesearch/proto/codesearch_service",
     proto = ":codesearch_service_proto",
     deps = [
