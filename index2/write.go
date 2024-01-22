@@ -39,7 +39,7 @@ type IndexWriter struct {
 	filesProcessed int
 
 	repoID    []byte // TODO(tylerw): set this via API instead of hacky
-	segmentID uuid.UUID
+	segmentID string
 }
 
 // Tuning constants for detecting text files.
@@ -77,17 +77,16 @@ func Create(pebbleDir string) *IndexWriter {
 	if err != nil {
 		log.Fatal(err)
 	}
-	segmentID, err := uuid.NewV7()
+	sID, err := uuid.NewV7()
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("SegmentID is %q", segmentID.String())
 	return &IndexWriter{
 		db:        db,
 		trigram:   sparse.NewSet(1 << 24),
 		post:      make([]postEntry, 0, npost),
 		inbuf:     make([]byte, 16384),
-		segmentID: segmentID,
+		segmentID: sID.String(),
 	}
 }
 
@@ -317,10 +316,6 @@ func (iw *IndexWriter) mergePost() {
 
 	npost := 0
 
-	segmentIDBytes, err := iw.segmentID.MarshalBinary()
-	if err != nil {
-		log.Fatal(err)
-	}
 	for {
 		trigram := e.trigram()
 
@@ -335,7 +330,7 @@ func (iw *IndexWriter) mergePost() {
 		}
 		eg.Go(func() error {
 			triString := trigramToString(trigram)
-			triKey := bytes.Join([][]byte{trigramKey(triString), segmentIDBytes}, []byte(":"))
+			triKey := append(trigramKey(triString), []byte(":" + iw.segmentID)...)
 			writeDocIDs(triKey, docIDs)
 			return nil
 		})

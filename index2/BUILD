@@ -24,6 +24,13 @@ go_library(
 
 go_test(
     name = "index2_test",
-    srcs = ["index2_test.go"],
-    deps = [":index2"],
+    srcs = [
+        "read_test.go",
+        "write_test.go",
+    ],
+    embed = [":index2"],
+    deps = [
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_roaringbitmap_roaring//:roaring",
+    ],
 )
