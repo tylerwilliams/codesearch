@@ -13,7 +13,6 @@ import (
 	"runtime/pprof"
 	"sort"
 
-	"github.com/google/codesearch/index"
 	"github.com/google/codesearch/index2"
 )
 
@@ -59,7 +58,6 @@ var (
 	resetFlag   = flag.Bool("reset", false, "discard existing index")
 	verboseFlag = flag.Bool("verbose", false, "print extra information")
 	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
-	v2          = flag.Bool("v2", true, "use index2 (pebble)")
 )
 
 type indexReader interface {
@@ -75,11 +73,7 @@ type indexWriter interface {
 
 func printPaths() {
 	var ix indexReader
-	if *v2 {
-		ix = index2.Open(index2.File())
-	} else {
-		ix = index.Open(index.File())
-	}
+	ix = index2.Open(index2.File())
 	for _, arg := range ix.Paths() {
 		fmt.Printf("%s\n", arg)
 	}
@@ -91,11 +85,7 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 
-	if *v2 {
-		log.Printf("Using pebble!")
-	} else {
-		log.Printf("Using old-file-based-index")
-	}
+	log.Printf("Using pebble!")
 
 	if *listFlag {
 		printPaths()
@@ -113,11 +103,7 @@ func main() {
 	}
 
 	if *resetFlag {
-		if *v2 {
-			os.RemoveAll(index2.File())
-		} else {
-			os.RemoveAll(index.File())
-		}
+		os.RemoveAll(index2.File())
 	}
 	if len(args) == 0 {
 		printPaths()
@@ -140,27 +126,10 @@ func main() {
 		args = args[1:]
 	}
 
-	// what the shit
-	master := index.File()
-	if _, err := os.Stat(master); err != nil {
-		// Does not exist.
-		*resetFlag = true
-	}
-	file := master
-	if !*resetFlag {
-		file += "~"
-	}
-
 	var ix indexWriter
-	if *v2 {
-		i := index2.Create(index2.File())
-		i.Verbose = *verboseFlag
-		ix = i
-	} else {
-		i := index.Create(file)
-		i.Verbose = *verboseFlag
-		ix = i
-	}
+	i := index2.Create(index2.File())
+	i.Verbose = *verboseFlag
+	ix = i
 	ix.AddPaths(args)
 
 	for _, arg := range args {
@@ -188,12 +157,6 @@ func main() {
 	log.Printf("flush index")
 	ix.Flush()
 
-	if !*resetFlag && !*v2 {
-		log.Printf("merge %s %s", master, file)
-		index.Merge(file+"~", master, file)
-		os.Remove(file)
-		os.Rename(file+"~", master)
-	}
 	log.Printf("done")
 	return
 }

@@ -5,10 +5,7 @@ go_library(
     srcs = ["cindex.go"],
     importpath = "github.com/google/codesearch/cmd/cindex",
     visibility = ["//visibility:private"],
-    deps = [
-        "//index",
-        "//index2",
-    ],
+    deps = ["//index2"],
 )
 
 go_binary(

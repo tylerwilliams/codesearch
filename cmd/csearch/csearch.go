@@ -11,7 +11,6 @@ import (
 	"os"
 	"runtime/pprof"
 
-	"github.com/google/codesearch/index"
 	"github.com/google/codesearch/index2"
 	"github.com/google/codesearch/query"
 	"github.com/google/codesearch/regexp"
@@ -145,19 +144,10 @@ func Main() {
 		log.Printf("query: %s\n", q)
 	}
 
-	ix := index.Open(index.File())
-	ix.Verbose = *verboseFlag
-
 	ix2 := index2.Open(index2.File())
 	ix2.Verbose = *verboseFlag
 
-	post := runQuery(ix, q, fre)
 	post2 := runQuery(ix2, q, fre)
-
-	for _, fileid := range post {
-		name := ix.Name(fileid)
-		g.File(name)
-	}
 
 	for _, fileid := range post2 {
 		name := ix2.Name(fileid)
