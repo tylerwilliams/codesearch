@@ -11,7 +11,7 @@ import (
 	"os"
 	"runtime/pprof"
 
-	"github.com/google/codesearch/index2"
+	"github.com/google/codesearch/index"
 	"github.com/google/codesearch/query"
 	"github.com/google/codesearch/regexp"
 )
@@ -68,7 +68,7 @@ func runQuery(ix iindex, q *query.Query, fre *regexp.Regexp) []uint32 {
 		post = ix.PostingQuery(q)
 	}
 	if *verboseFlag {
-		log.Printf("post query identified %d possible files: %d\n", len(post), post)
+		log.Printf("post query identified %d possible files\n", len(post))
 	}
 
 	if fre != nil {
@@ -144,7 +144,7 @@ func Main() {
 		log.Printf("query: %s\n", q)
 	}
 
-	ix2 := index2.Open(index2.File())
+	ix2 := index.Open(index.File())
 	ix2.Verbose = *verboseFlag
 
 	post2 := runQuery(ix2, q, fre)

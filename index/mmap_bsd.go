@@ -5,7 +5,7 @@
 //go:build darwin || freebsd || openbsd || netbsd
 // +build darwin freebsd openbsd netbsd
 
-package index2
+package index
 
 import (
 	"log"

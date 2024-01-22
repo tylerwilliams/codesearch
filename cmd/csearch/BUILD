@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/google/codesearch/cmd/csearch",
     visibility = ["//visibility:private"],
     deps = [
-        "//index2",
+        "//index",
         "//query",
         "//regexp",
     ],

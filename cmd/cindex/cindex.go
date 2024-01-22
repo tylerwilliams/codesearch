@@ -13,7 +13,7 @@ import (
 	"runtime/pprof"
 	"sort"
 
-	"github.com/google/codesearch/index2"
+	"github.com/google/codesearch/index"
 )
 
 var usageMessage = `usage: cindex [-list] [-reset] [path...]
@@ -73,7 +73,7 @@ type indexWriter interface {
 
 func printPaths() {
 	var ix indexReader
-	ix = index2.Open(index2.File())
+	ix = index.Open(index.File())
 	for _, arg := range ix.Paths() {
 		fmt.Printf("%s\n", arg)
 	}
@@ -103,7 +103,7 @@ func main() {
 	}
 
 	if *resetFlag {
-		os.RemoveAll(index2.File())
+		os.RemoveAll(index.File())
 	}
 	if len(args) == 0 {
 		printPaths()
@@ -127,7 +127,7 @@ func main() {
 	}
 
 	var ix indexWriter
-	i := index2.Create(index2.File())
+	i := index.Create(index.File())
 	i.Verbose = *verboseFlag
 	ix = i
 	ix.AddPaths(args)
