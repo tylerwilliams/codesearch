@@ -2,5 +2,20 @@ syntax = "proto3";
 
 package search;
 
-message SearchRequest {}
-message SearchResponse {}
+message Query {
+  string term = 1;
+}
+
+message Result {
+  string repo = 1;
+  string filename = 2;
+  string snippet = 3;
+}
+
+message SearchRequest {
+  Query query = 1;
+}
+
+message SearchResponse {
+  repeated Result results = 1;
+}
