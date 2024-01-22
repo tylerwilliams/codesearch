@@ -3,6 +3,7 @@ load("//rules/go:index.bzl", "go_sdk_tool")
 
 # gazelle:prefix github.com/google/codesearch
 # gazelle:build_file_name BUILD,BUILD.bazel
+# gazelle:exclude testrepo/*
 # gazelle:exclude **/*.pb.go
 # gazelle:exclude bundle.go
 # gazelle:prefix github.com/google/codesearch
