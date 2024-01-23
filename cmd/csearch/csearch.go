@@ -72,17 +72,16 @@ func indexDir() string {
 	return filepath.Clean(home + "/.csindex")
 }
 
-type iindex interface {
-	PostingQuery(q *query.Query) []uint32
-	Name(fileid uint32) string
-}
-
-func runQuery(ix iindex, q *query.Query, fre *regexp.Regexp) []uint32 {
+func runQuery(ix *index.Index, q *query.Query, fre *regexp.Regexp) []uint32 {
 	var post []uint32
+	var err error
 	if *bruteFlag {
-		post = ix.PostingQuery(&query.Query{Op: query.QAll})
+		post, err = ix.PostingQuery(&query.Query{Op: query.QAll})
 	} else {
-		post = ix.PostingQuery(q)
+		post, err = ix.PostingQuery(q)
+	}
+	if err != nil {
+		log.Fatal(err)
 	}
 	if *verboseFlag {
 		log.Printf("post query identified %d possible files\n", len(post))
@@ -92,7 +91,10 @@ func runQuery(ix iindex, q *query.Query, fre *regexp.Regexp) []uint32 {
 		fnames := make([]uint32, 0, len(post))
 
 		for _, fileid := range post {
-			name := ix.Name(fileid)
+			name, err := ix.Name(fileid)
+			if err != nil {
+				log.Fatal(err)
+			}
 			if fre.MatchString(name, true, true) < 0 {
 				continue
 			}
@@ -165,8 +167,15 @@ func Main() {
 	post2 := runQuery(ix, q, fre)
 
 	for _, fileid := range post2 {
-		name := ix.Name(fileid)
-		r := bytes.NewReader(ix.Contents(fileid))
+		name, err := ix.Name(fileid)
+		if err != nil {
+			log.Fatal(err)
+		}
+		buf, err := ix.Contents(fileid)
+		if err != nil {
+			log.Fatal(err)
+		}
+		r := bytes.NewReader(buf)
 		g.Reader(r, name)
 	}
 

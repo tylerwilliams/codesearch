@@ -56,7 +56,6 @@ func usage() {
 }
 
 var (
-	listFlag    = flag.Bool("list", false, "list indexed paths and exit")
 	resetFlag   = flag.Bool("reset", false, "discard existing index")
 	verboseFlag = flag.Bool("verbose", false, "print extra information")
 	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
@@ -86,26 +85,12 @@ func indexDir() string {
 	return filepath.Clean(home + "/.csindex")
 }
 
-func printPaths() {
-	var ix indexReader
-	ix = index.Open(indexDir())
-	for _, arg := range ix.Paths() {
-		fmt.Printf("%s\n", arg)
-	}
-	ix.Close()
-}
-
 func main() {
 	flag.Usage = usage
 	flag.Parse()
 	args := flag.Args()
 
 	log.Printf("Using pebble!")
-
-	if *listFlag {
-		printPaths()
-		return
-	}
 
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
@@ -119,9 +104,6 @@ func main() {
 
 	if *resetFlag {
 		os.RemoveAll(indexDir())
-	}
-	if len(args) == 0 {
-		printPaths()
 	}
 
 	// Translate paths to absolute paths so that we can

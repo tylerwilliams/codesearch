@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"sort"
 
 	"github.com/RoaringBitmap/roaring"
@@ -26,19 +25,24 @@ func Open(db *pebble.DB) *Index {
 	}
 }
 
-func (i *Index) Close() {
+func (i *Index) Close() error {
 	if err := i.db.Close(); err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // Name returns the name corresponding to the given fileid.
-func (ix *Index) Name(fileid uint32) string {
-	return string(ix.NameBytes(fileid))
+func (ix *Index) Name(fileid uint32) (string, error) {
+	buf, err := ix.NameBytes(fileid)
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
 }
 
 // NameBytes returns the name corresponding to the given fileid.
-func (ix *Index) NameBytes(fileid uint32) []byte {
+func (ix *Index) NameBytes(fileid uint32) ([]byte, error) {
 	iter := ix.db.NewIter(&pebble.IterOptions{
 		LowerBound: filenameKey(""),
 		UpperBound: filenameKey(string('\xff')),
@@ -47,15 +51,14 @@ func (ix *Index) NameBytes(fileid uint32) []byte {
 
 	filePrefix := filenameKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
 	if !iter.SeekGE(filePrefix) || !bytes.HasPrefix(iter.Key(), filePrefix) {
-		log.Fatalf("File (name) %d not found in index (prefix: %q)", fileid, filePrefix)
-		return nil
+		return nil, fmt.Errorf("File (name) %d not found in index (prefix: %q)", fileid, filePrefix)
 	}
 	buf := make([]byte, len(iter.Value()))
 	copy(buf, iter.Value())
-	return buf
+	return buf, nil
 }
 
-func (ix *Index) Contents(fileid uint32) []byte {
+func (ix *Index) Contents(fileid uint32) ([]byte, error) {
 	iter := ix.db.NewIter(&pebble.IterOptions{
 		LowerBound: dataKey(""),
 		UpperBound: dataKey(string('\xff')),
@@ -64,26 +67,33 @@ func (ix *Index) Contents(fileid uint32) []byte {
 
 	filePrefix := dataKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
 	if !iter.SeekGE(filePrefix) || !bytes.HasPrefix(iter.Key(), filePrefix) {
-		log.Fatalf("File (data) %d not found in index (prefix: %q)", fileid, filePrefix)
-		return nil
+		return nil, fmt.Errorf("File (data) %d not found in index (prefix: %q)", fileid, filePrefix)
 	}
 	buf := make([]byte, len(iter.Value()))
 	copy(buf, iter.Value())
-	return buf
+	return buf, nil
 }
 
 // Paths returns the list of indexed paths.
-func (ix *Index) Paths() []string {
-	fileIDs := ix.allIndexedFiles()
+func (ix *Index) Paths() ([]string, error) {
+	fileIDs, err := ix.allIndexedFiles()
+	if err != nil {
+		return nil, err
+	}
+
 	names := make([]string, 0, len(fileIDs))
 
 	for _, fileID := range fileIDs {
-		names = append(names, ix.Name(fileID))
+		name, err := ix.Name(fileID)
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, name)
 	}
-	return names
+	return names, nil
 }
 
-func (ix *Index) allIndexedFiles() []uint32 {
+func (ix *Index) allIndexedFiles() ([]uint32, error) {
 	iter := ix.db.NewIter(&pebble.IterOptions{
 		LowerBound: filenameKey(""),
 		UpperBound: filenameKey(string('\xff')),
@@ -95,19 +105,19 @@ func (ix *Index) allIndexedFiles() []uint32 {
 		digest := bytes.TrimPrefix(iter.Key(), filenameKey(""))
 		hashSum, err := hex.DecodeString(string(digest))
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		fileid := bytesToUint32(hashSum[:4])
 		found = append(found, fileid)
 	}
-	return found
+	return found, nil
 }
 
-func (ix *Index) PostingList(trigram uint32) []uint32 {
+func (ix *Index) PostingList(trigram uint32) ([]uint32, error) {
 	return ix.postingList(trigram, nil)
 }
 
-func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) *roaring.Bitmap {
+func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) (*roaring.Bitmap, error) {
 	triString := trigramToString(trigram)
 	iter := ix.db.NewIter(&pebble.IterOptions{
 		LowerBound: trigramKey(triString),
@@ -120,7 +130,7 @@ func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) *roarin
 	for iter.First(); iter.Valid(); iter.Next() {
 		//log.Printf("query %q matched key %q", triString, iter.Key())
 		if _, err := postingList.ReadFrom(bytes.NewReader(iter.Value())); err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		resultSet = roaring.Or(resultSet, postingList)
 		postingList.Clear()
@@ -128,41 +138,44 @@ func (ix *Index) postingListBM(trigram uint32, restrict *roaring.Bitmap) *roarin
 	if !restrict.IsEmpty() {
 		resultSet.And(restrict)
 	}
-	return resultSet
+	return resultSet, nil
 }
 
-func (ix *Index) postingList(trigram uint32, restrict []uint32) []uint32 {
-	bm := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
-	x := bm.ToArray()
-	//log.Printf("postinglist(%+v, restrict: %+v) => %+v", trigramToBytes(trigram), restrict, x)
-	return x
+func (ix *Index) postingList(trigram uint32, restrict []uint32) ([]uint32, error) {
+	bm, err := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
+	if err != nil {
+		return nil, err
+	}
+	return bm.ToArray(), nil
 }
 
-func (ix *Index) PostingAnd(list []uint32, trigram uint32) []uint32 {
+func (ix *Index) PostingAnd(list []uint32, trigram uint32) ([]uint32, error) {
 	return ix.postingAnd(list, trigram, nil)
 }
 
-func (ix *Index) postingAnd(list []uint32, trigram uint32, restrict []uint32) []uint32 {
-	bm := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
+func (ix *Index) postingAnd(list []uint32, trigram uint32, restrict []uint32) ([]uint32, error) {
+	bm, err := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
+	if err != nil {
+		return nil, err
+	}
 	bm.And(roaring.BitmapOf(list...))
-	x := bm.ToArray()
-	//log.Printf("postingAnd(..., %+v, restrict: %+v) => %+v", trigramToBytes(trigram), restrict, x)
-	return x
+	return bm.ToArray(), nil
 }
 
-func (ix *Index) PostingOr(list []uint32, trigram uint32) []uint32 {
+func (ix *Index) PostingOr(list []uint32, trigram uint32) ([]uint32, error) {
 	return ix.postingOr(list, trigram, nil)
 }
 
-func (ix *Index) postingOr(list []uint32, trigram uint32, restrict []uint32) []uint32 {
-	bm := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
+func (ix *Index) postingOr(list []uint32, trigram uint32, restrict []uint32) ([]uint32, error) {
+	bm, err := ix.postingListBM(trigram, roaring.BitmapOf(restrict...))
+	if err != nil {
+		return nil, err
+	}
 	bm.Or(roaring.BitmapOf(list...))
-	x := bm.ToArray()
-	//log.Printf("postingOr(%+v, %+v, restrict: %+v) => %+v", list, trigramToBytes(trigram), restrict, x)
-	return x
+	return bm.ToArray(), nil
 }
 
-func (ix *Index) merge(fileids []uint32) []uint32 {
+func (ix *Index) merge(fileids []uint32) ([]uint32, error) {
 	filenames := make(map[uint32][]byte)
 
 	fnameIter := ix.db.NewIter(&pebble.IterOptions{
@@ -174,7 +187,7 @@ func (ix *Index) merge(fileids []uint32) []uint32 {
 	for _, fileid := range fileids {
 		filePrefix := filenameKey(fmt.Sprintf("%x", string(uint32ToBytes(fileid))))
 		if !fnameIter.SeekGE(filePrefix) || !bytes.HasPrefix(fnameIter.Key(), filePrefix) {
-			log.Fatalf("File %d not found in index (prefix: %q)", fileid, filePrefix)
+			return nil, fmt.Errorf("File %d not found in index (prefix: %q)", fileid, filePrefix)
 		}
 		buf := make([]byte, len(fnameIter.Value()))
 		copy(buf, fnameIter.Value())
@@ -205,59 +218,66 @@ func (ix *Index) merge(fileids []uint32) []uint32 {
 			fileids = append(fileids, fileid)
 		}
 	}
-	return fileids
+	return fileids, nil
 }
 
-func (ix *Index) PostingQuery(q *query.Query) []uint32 {
-	return ix.merge(ix.postingQuery(q, nil))
+func (ix *Index) PostingQuery(q *query.Query) ([]uint32, error) {
+	pl, err := ix.postingQuery(q, nil)
+	if err != nil {
+		return nil, err
+	}
+	return ix.merge(pl)
 }
 
-func (ix *Index) postingQuery(q *query.Query, restrict []uint32) (ret []uint32) {
+func (ix *Index) postingQuery(q *query.Query, restrict []uint32) (ret []uint32, err error) {
 	var list []uint32
 	switch q.Op {
 	case query.QNone:
 		// nothing
 	case query.QAll:
 		if restrict != nil {
-			return restrict
+			return restrict, err
 		}
-		list = ix.allIndexedFiles()
+		list, err = ix.allIndexedFiles()
 	case query.QAnd:
 		for _, t := range q.Trigram {
 			tri := uint32(t[0])<<16 | uint32(t[1])<<8 | uint32(t[2])
 			if list == nil {
-				list = ix.postingList(tri, restrict)
+				list, err = ix.postingList(tri, restrict)
 			} else {
-				list = ix.postingAnd(list, tri, restrict)
+				list, err = ix.postingAnd(list, tri, restrict)
 			}
 			if len(list) == 0 {
-				return nil
+				return nil, err
 			}
 		}
 		for _, sub := range q.Sub {
 			if list == nil {
 				list = restrict
 			}
-			list = ix.postingQuery(sub, list)
+			list, err = ix.postingQuery(sub, list)
 			if len(list) == 0 {
-				return nil
+				return nil, err
 			}
 		}
 	case query.QOr:
 		for _, t := range q.Trigram {
 			tri := uint32(t[0])<<16 | uint32(t[1])<<8 | uint32(t[2])
 			if list == nil {
-				list = ix.postingList(tri, restrict)
+				list, err = ix.postingList(tri, restrict)
 			} else {
-				list = ix.postingOr(list, tri, restrict)
+				list, err = ix.postingOr(list, tri, restrict)
 			}
 		}
 		for _, sub := range q.Sub {
-			list1 := ix.postingQuery(sub, restrict)
-			list = mergeOr(list, list1)
+			l, err := ix.postingQuery(sub, restrict)
+			if err != nil {
+				return nil, err
+			}
+			list = mergeOr(list, l)
 		}
 	}
-	return list
+	return list, err
 }
 
 func mergeOr(l1, l2 []uint32) []uint32 {
