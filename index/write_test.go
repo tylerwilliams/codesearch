@@ -88,7 +88,6 @@ func TestTrivialWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
 
 	iw, err := Create(db)
 	if err != nil {
@@ -104,7 +103,7 @@ func TestTrivialWrite(t *testing.T) {
 	}
 	iw.flushPost()
 	iw.Flush()
-	iw.Close()
+	db.Close()
 
 	want := trivialIndex
 	got := readIndex(t, d)

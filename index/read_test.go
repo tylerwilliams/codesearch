@@ -114,27 +114,41 @@ func TestTrivialPosting(t *testing.T) {
 
 	writeTestingIndex(t, d)
 
+	catchErr := func(pl []uint32, err error) []uint32 {
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pl
+	}
+
 	db, err := pebble.Open(d, &pebble.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ix := Open(db)
-	if l := ix.PostingList(tri('S', 'e', 'a')); !equalList(l, []uint32{267523926, 2101109549}) {
+	if l := catchErr(ix.PostingList(tri('S', 'e', 'a'))); !equalList(l, []uint32{267523926, 2101109549}) {
 		t.Errorf("PostingList(Sea) = %v, want [267523926 2101109549]", l)
 	}
-	if l := ix.PostingList(tri('G', 'o', 'o')); !equalList(l, []uint32{267523926, 2101109549, 3423166451}) {
+	if l := catchErr(ix.PostingList(tri('G', 'o', 'o'))); !equalList(l, []uint32{267523926, 2101109549, 3423166451}) {
 		t.Errorf("PostingList(Goo) = %v, want [267523926 2101109549 3423166451]", l)
 	}
-	if l := ix.PostingAnd(ix.PostingList(tri('S', 'e', 'a')), tri('G', 'o', 'o')); !equalList(l, []uint32{267523926, 2101109549}) {
+
+	sea := catchErr(ix.PostingList(tri('S', 'e', 'a')))
+	if l := catchErr(ix.PostingAnd(sea, tri('G', 'o', 'o'))); !equalList(l, []uint32{267523926, 2101109549}) {
 		t.Errorf("PostingList(Sea&Goo) = %v, want [267523926 2101109549]", l)
 	}
-	if l := ix.PostingAnd(ix.PostingList(tri('G', 'o', 'o')), tri('S', 'e', 'a')); !equalList(l, []uint32{267523926, 2101109549}) {
+
+	goo := catchErr(ix.PostingList(tri('G', 'o', 'o')))
+	if l := catchErr(ix.PostingAnd(goo, tri('S', 'e', 'a'))); !equalList(l, []uint32{267523926, 2101109549}) {
 		t.Errorf("PostingList(Goo&Sea) = %v, want [267523926 2101109549]", l)
 	}
-	if l := ix.PostingOr(ix.PostingList(tri('S', 'e', 'a')), tri('G', 'o', 'o')); !equalList(l, []uint32{267523926, 2101109549, 3423166451}) {
+
+	sea = catchErr(ix.PostingList(tri('S', 'e', 'a')))
+	if l := catchErr(ix.PostingOr(sea, tri('G', 'o', 'o'))); !equalList(l, []uint32{267523926, 2101109549, 3423166451}) {
 		t.Errorf("PostingList(Sea|Goo) = %v, want [267523926 2101109549 3423166451]", l)
 	}
-	if l := ix.PostingOr(ix.PostingList(tri('G', 'o', 'o')), tri('S', 'e', 'a')); !equalList(l, []uint32{267523926, 2101109549, 3423166451}) {
+	goo = catchErr(ix.PostingList(tri('G', 'o', 'o')))
+	if l := catchErr(ix.PostingOr(goo, tri('S', 'e', 'a'))); !equalList(l, []uint32{267523926, 2101109549, 3423166451}) {
 		t.Errorf("PostingList(Goo|Sea) = %v, want [267523926 2101109549 3423166451]", l)
 	}
 }
