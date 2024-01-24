@@ -6,10 +6,15 @@ message Query {
   string term = 1;
 }
 
+message Snippet {
+  string lines = 1;
+}
+
 message Result {
   string repo = 1;
   string filename = 2;
-  string snippet = 3;
+  int32 match_count = 3;
+  repeated Snippet snippets = 4;
 }
 
 message SearchRequest {

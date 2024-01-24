@@ -10,6 +10,8 @@ go_library(
         "//proto:codesearch_service_go_proto",
         "//proto:index_go_proto",
         "//proto:search_go_proto",
+        "//query",
+        "//regexp",
         "@com_github_cockroachdb_pebble//:pebble",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//reflection",

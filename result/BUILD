@@ -5,4 +5,5 @@ go_library(
     srcs = ["result.go"],
     importpath = "github.com/google/codesearch/result",
     visibility = ["//visibility:public"],
+    deps = ["//proto:search_go_proto"],
 )

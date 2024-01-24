@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"log"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/google/codesearch/index"
+	"github.com/google/codesearch/query"
+	"github.com/google/codesearch/regexp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -53,7 +56,10 @@ func New() (*codesearchServer, error) {
 
 func (css *codesearchServer) Index(ctx context.Context, req *inpb.IndexRequest) (*inpb.IndexResponse, error) {
 	log.Printf("Index RPC")
-	iw := index.Create(css.db)
+	iw, err := index.Create(css.db)
+	if err != nil {
+		return nil, err
+	}
 	_ = iw
 	return &inpb.IndexResponse{}, nil
 }
@@ -61,8 +67,47 @@ func (css *codesearchServer) Index(ctx context.Context, req *inpb.IndexRequest) 
 func (css *codesearchServer) Search(ctx context.Context, req *srpb.SearchRequest) (*srpb.SearchResponse, error) {
 	log.Printf("Search RPC")
 	ir := index.Open(css.db)
-	_ = ir
-	return &srpb.SearchResponse{}, nil
+
+	g := regexp.Grep{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+
+	pat := "(?m)" + req.GetQuery().GetTerm()
+	pat = "(?i)" + pat
+
+	re, err := regexp.Compile(pat)
+	if err != nil {
+		return nil, err
+	}
+	g.Regexp = re
+
+	q := query.RegexpQuery(re.Syntax)
+	log.Printf("query: %s\n", q)
+
+	matchingFiles, err := ir.PostingQuery(q)
+	if err != nil {
+		return nil, err
+	}
+
+	rsp := &srpb.SearchResponse{}
+	for _, fileid := range matchingFiles {
+		name, err := ir.Name(fileid)
+		if err != nil {
+			return nil, err
+		}
+		buf, err := ir.Contents(fileid)
+		if err != nil {
+			return nil, err
+		}
+		result, err := g.MakeResult(bytes.NewReader(buf), name)
+		if err != nil {
+			return nil, err
+		}
+		rsp.Results = append(rsp.Results, result.ToProto())
+	}
+
+	return rsp, nil
 }
 
 func main() {
