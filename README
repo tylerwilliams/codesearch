@@ -2,15 +2,10 @@ Code Search is a tool for indexing and then performing
 regular expression searches over large bodies of source code.
 It is a set of command-line programs written in Go.
 
-For background and an overview of the commands,
-see http://swtch.com/~rsc/regexp/regexp4.html.
+This version of codesearch is based on the original version
+github.com/google/codesearch, by Russ Cox.
 
-To install:
+It's mostly an experiment with maintaining the search index
+in pebble (github.com/cockroachdb/pebble), an LSMT, but also
+in serving and scoring in different ways.
 
-	go get github.com/google/codesearch/cmd/...
-
-Use "go get -u" to update an existing installation.
-
-Russ Cox
-rsc@swtch.com
-June 2015
