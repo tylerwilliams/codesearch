@@ -7,20 +7,12 @@ package regexp
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"io"
 	"regexp/syntax"
 	"sort"
 
 	"github.com/google/codesearch/sparse"
-)
-
-var (
-	listMatchesOnly = flag.Bool("l", false, "list matching files only")
-	matchCountsOnly = flag.Bool("c", false, "print match counts only")
-	showLineNumbers = flag.Bool("n", false, "show line numbers")
-	omitFileNames   = flag.Bool("h", false, "omit file names")
 )
 
 // A matcher holds the state for running regular expression search.
@@ -370,11 +362,11 @@ type Grep struct {
 	buf []byte
 }
 
-func (g *Grep) AddFlags() {
-	g.L = *listMatchesOnly
-	g.C = *matchCountsOnly
-	g.N = *showLineNumbers
-	g.H = *omitFileNames
+func (g *Grep) AddFlags(l, c, n, h bool) {
+	g.L = l
+	g.C = c
+	g.N = n
+	g.H = h
 }
 
 var nl = []byte{'\n'}

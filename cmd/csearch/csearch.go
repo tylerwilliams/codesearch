@@ -56,7 +56,13 @@ var (
 	verboseFlag = flag.Bool("verbose", false, "print extra information")
 	bruteFlag   = flag.Bool("brute", false, "brute force - search all files in index")
 	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
-	matches     bool
+
+	listMatchesOnly = flag.Bool("l", false, "list matching files only")
+	matchCountsOnly = flag.Bool("c", false, "print match counts only")
+	showLineNumbers = flag.Bool("n", false, "show line numbers")
+	omitFileNames   = flag.Bool("h", false, "omit file names")
+
+	matches bool
 )
 
 func indexDir() string {
@@ -114,7 +120,8 @@ func Main() {
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
-	g.AddFlags()
+
+	g.AddFlags(*listMatchesOnly, *matchCountsOnly, *showLineNumbers, *omitFileNames)
 
 	flag.Usage = usage
 	flag.Parse()
