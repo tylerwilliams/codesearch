@@ -67,9 +67,8 @@ type indexReader interface {
 }
 
 type indexWriter interface {
-	AddPaths([]string)
-	AddFile(string)
-	Flush()
+	AddFile(string) error
+	Flush() error
 }
 
 func indexDir() string {
@@ -129,10 +128,12 @@ func main() {
 	}
 
 	var ix indexWriter
-	i := index.Create(db)
+	i, err := index.Create(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 	i.Verbose = *verboseFlag
 	ix = i
-	ix.AddPaths(args)
 
 	for _, arg := range args {
 		log.Printf("index %s", arg)
@@ -151,13 +152,17 @@ func main() {
 				return nil
 			}
 			if info != nil && info.Mode()&os.ModeType == 0 {
-				ix.AddFile(path)
+				if err := ix.AddFile(path); err != nil {
+					log.Fatal(err)
+				}
 			}
 			return nil
 		})
 	}
 	log.Printf("flush index")
-	ix.Flush()
+	if err := ix.Flush(); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Printf("done")
 	return
