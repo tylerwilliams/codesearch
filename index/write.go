@@ -2,7 +2,6 @@ package index
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -71,10 +70,10 @@ func makePostEntry(trigram, fileid uint32) postEntry {
 }
 
 // Create returns a new IndexWriter that will write the index to file.
-func Create(db *pebble.DB) *IndexWriter {
+func Create(db *pebble.DB) (*IndexWriter, error) {
 	sID, err := uuid.NewV7()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	return &IndexWriter{
 		db:        db,
@@ -82,34 +81,18 @@ func Create(db *pebble.DB) *IndexWriter {
 		post:      make([]postEntry, 0, npost),
 		inbuf:     make([]byte, 16384),
 		segmentID: sID.String(),
-	}
-}
-
-// AddPaths adds the given paths to the index's list of paths.
-func (iw *IndexWriter) AddPaths(paths []string) {
-	log.Printf("AddPaths %s (ignored?!?!)", paths)
-	return
+	}, nil
 }
 
 // AddFile adds the file with the given name (opened using os.Open)
 // to the index. It logs errors using package log.
-func (iw *IndexWriter) AddFile(name string) {
+func (iw *IndexWriter) AddFile(name string) error {
 	f, err := os.Open(name)
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 	defer f.Close()
-	iw.Add(name, f)
-}
-
-func (iw *IndexWriter) hashFile(f io.ReadSeeker) []byte {
-	// Compute the SHA256 hash of the file.
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		log.Fatal(err)
-	}
-	return h.Sum(nil)
+	return iw.Add(name, f)
 }
 
 func (iw *IndexWriter) fileExists(fileDigest string) bool {
@@ -124,13 +107,16 @@ func (iw *IndexWriter) fileExists(fileDigest string) bool {
 
 // Add adds the file f to the index under the given name.
 // It logs errors using package log.
-func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
-	hashSum := iw.hashFile(f)
+func (iw *IndexWriter) Add(name string, f io.ReadSeeker) error {
+	hashSum, err := hashFile(f)
+	if err != nil {
+		return err
+	}
 	digest := fmt.Sprintf("%x", hashSum)
 	fileid := bytesToUint32(hashSum[:4])
 
 	if iw.fileExists(digest) {
-		return
+		return nil
 	}
 
 	f.Seek(0, 0)
@@ -153,10 +139,10 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 						break
 					}
 					log.Printf("%s: %v\n", name, err)
-					return
+					return nil
 				}
 				log.Printf("%s: 0-length read\n", name)
-				return
+				return nil
 			}
 			buf = buf[:n]
 			i = 0
@@ -171,19 +157,19 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 			if iw.LogSkip {
 				log.Printf("%s: invalid UTF-8, ignoring\n", name)
 			}
-			return
+			return nil
 		}
 		if n > maxFileLen {
 			if iw.LogSkip {
 				log.Printf("%s: too long, ignoring\n", name)
 			}
-			return
+			return nil
 		}
 		if linelen++; linelen > maxLineLen {
 			if iw.LogSkip {
 				log.Printf("%s: very long lines, ignoring\n", name)
 			}
-			return
+			return nil
 		}
 		if c == '\n' {
 			linelen = 0
@@ -193,7 +179,7 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 		if iw.LogSkip {
 			log.Printf("%s: too many trigrams, probably not text, ignoring\n", name)
 		}
-		return
+		return nil
 	}
 	iw.totalBytes += n
 
@@ -203,44 +189,42 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) {
 
 	for _, trigram := range iw.trigram.Dense() {
 		if len(iw.post) >= cap(iw.post) {
-			iw.flushPost()
+			if err := iw.flushPost(); err != nil {
+				return err
+			}
 		}
 		iw.post = append(iw.post, makePostEntry(trigram, fileid))
 	}
 
 	if err := iw.db.Set(filenameKey(digest), []byte(name), pebble.NoSync); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := iw.db.Set(dataKey(digest), buf, pebble.NoSync); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := iw.db.Set(namehashKey(hashString(name)), []byte(digest), pebble.NoSync); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	iw.filesProcessed += 1
 	log.Printf("iw.filesProcessed: %d", iw.filesProcessed)
+	return nil
 }
 
-func (iw *IndexWriter) Close() {
-	if err := iw.db.Close(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func (iw *IndexWriter) Flush() {
+func (iw *IndexWriter) Flush() error {
 	iw.mergePost()
 	if err := iw.db.Flush(); err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // flushPost writes iw.post to a new temporary file and
 // clears the slice.
-func (iw *IndexWriter) flushPost() {
+func (iw *IndexWriter) flushPost() error {
 	w, err := os.CreateTemp("", "csearch-index")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if iw.Verbose {
 		log.Printf("flush %d entries to %s", len(iw.post), w.Name())
@@ -252,19 +236,20 @@ func (iw *IndexWriter) flushPost() {
 	data := (*[npost * 8]byte)(unsafe.Pointer(&iw.post[0]))[:len(iw.post)*8]
 	if n, err := w.Write(data); err != nil || n < len(data) {
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
-		log.Fatalf("short write writing %s", w.Name())
+		return fmt.Errorf("short write writing %s", w.Name())
 	}
 
 	iw.post = iw.post[:0]
 	w.Seek(0, 0)
 	iw.postFile = append(iw.postFile, w)
+	return nil
 }
 
 // mergePost reads the flushed index entries and merges them
 // into posting lists, writing the resulting lists to out.
-func (iw *IndexWriter) mergePost() {
+func (iw *IndexWriter) mergePost() error {
 	var h postHeap
 
 	log.Printf("merge %d files + mem", len(iw.postFile))
@@ -279,34 +264,38 @@ func (iw *IndexWriter) mergePost() {
 	mu := sync.Mutex{}
 	batch := iw.db.NewBatch()
 
-	flushBatch := func() {
+	flushBatch := func() error {
 		if batch.Empty() {
-			return
+			return nil
 		}
 		if err := batch.Commit(pebble.Sync); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		log.Printf("flushed batch")
 		batch = iw.db.NewBatch()
+		return nil
 	}
 
 	eg := new(errgroup.Group)
 	eg.SetLimit(runtime.GOMAXPROCS(0))
-	writeDocIDs := func(key []byte, ids []uint32) {
+	writeDocIDs := func(key []byte, ids []uint32) error {
 		buf := new(bytes.Buffer)
 		pl := roaring.BitmapOf(ids...)
 		if _, err := pl.WriteTo(buf); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		mu.Lock()
 		defer mu.Unlock()
 
 		if err := batch.Set(key, buf.Bytes(), nil); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		if batch.Len() >= 64<<20 {
-			flushBatch()
+			if err := flushBatch(); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 
 	npost := 0
@@ -326,8 +315,7 @@ func (iw *IndexWriter) mergePost() {
 		eg.Go(func() error {
 			triString := trigramToString(trigram)
 			triKey := append(trigramKey(triString), []byte(":"+iw.segmentID)...)
-			writeDocIDs(triKey, docIDs)
-			return nil
+			return writeDocIDs(triKey, docIDs)
 		})
 
 		if trigram == 1<<24-1 {
@@ -335,8 +323,9 @@ func (iw *IndexWriter) mergePost() {
 		}
 	}
 	eg.Wait()
-	flushBatch()
+	err := flushBatch()
 	log.Printf("Wrote %d posting lists", npost)
+	return err
 }
 
 // A postChunk represents a chunk of post entries flushed to disk or

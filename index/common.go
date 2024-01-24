@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 
@@ -81,6 +82,15 @@ func hashString(s string) string {
 		log.Fatal(err)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func hashFile(f io.ReadSeeker) ([]byte, error) {
+	// Compute the SHA256 hash of the file.
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }
 
 func makeKey(prefix, key string) []byte {

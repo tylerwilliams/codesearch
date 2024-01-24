@@ -76,6 +76,7 @@ func readIndex(t *testing.T, dir string) map[string]string {
 			x[string(iter.Key())] = string(iter.Value())
 		}
 	}
+	db.Close()
 	return x
 }
 
@@ -87,11 +88,19 @@ func TestTrivialWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
 
-	iw := Create(db)
+	iw, err := Create(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	iw.segmentID = "1"
 	for name, contents := range trivialFiles {
-		iw.Add(name, strings.NewReader(contents))
+		err := iw.Add(name, strings.NewReader(contents))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	iw.flushPost()
 	iw.Flush()
