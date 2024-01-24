@@ -12,6 +12,7 @@ import (
 	"regexp/syntax"
 	"sort"
 
+	"github.com/google/codesearch/result"
 	"github.com/google/codesearch/sparse"
 )
 
@@ -465,4 +466,75 @@ func (g *Grep) Reader(r io.Reader, name string) {
 	if g.C && count > 0 {
 		fmt.Fprintf(g.Stdout, "%s: %d\n", name, count)
 	}
+}
+
+func (g *Grep) MakeResult(r io.Reader, name string) (*result.Result, error) {
+	snips := make([][]byte, 0)
+
+	if g.buf == nil {
+		g.buf = make([]byte, 1<<20)
+	}
+	var (
+		buf        = g.buf[:0]
+		needLineno = true
+		lineno     = 1
+		count      = 0
+		beginText  = true
+		endText    = false
+	)
+
+	for {
+		n, err := io.ReadFull(r, buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+		end := len(buf)
+		if err == nil {
+			i := bytes.LastIndex(buf, nl)
+			if i >= 0 {
+				end = i + 1
+			}
+		} else {
+			endText = true
+		}
+		chunkStart := 0
+		for chunkStart < end {
+			m1 := g.Regexp.Match(buf[chunkStart:end], beginText, endText) + chunkStart
+			beginText = false
+			if m1 < chunkStart {
+				break
+			}
+			g.Match = true
+			lineStart := bytes.LastIndex(buf[chunkStart:m1], nl) + 1 + chunkStart
+			lineEnd := m1 + 1
+			if lineEnd > end {
+				lineEnd = end
+			}
+			if needLineno {
+				lineno += countNL(buf[chunkStart:lineStart])
+			}
+			snip := fmt.Sprintf("%d: %s", lineno, buf[lineStart:lineEnd])
+			count++
+			snips = append(snips, []byte(snip))
+
+			if needLineno {
+				lineno++
+			}
+			chunkStart = lineEnd
+		}
+		if needLineno && err == nil {
+			lineno += countNL(buf[chunkStart:end])
+		}
+		n = copy(buf, buf[end:])
+		buf = buf[:n]
+		if len(buf) == 0 && err != nil {
+			if err != io.EOF && err != io.ErrUnexpectedEOF {
+				return nil, err
+			}
+			break
+		}
+	}
+	return &result.Result{
+		Count:    count,
+		Filename: name,
+		Snippets: snips,
+	}, nil
 }

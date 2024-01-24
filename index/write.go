@@ -122,12 +122,13 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) error {
 	f.Seek(0, 0)
 	iw.trigram.Reset()
 	var (
-		c       = byte(0)
-		i       = 0
-		buf     = iw.inbuf[:0]
-		tv      = uint32(0)
-		n       = int64(0)
-		linelen = 0
+		c         = byte(0)
+		i         = 0
+		buf       = iw.inbuf[:0]
+		readCount = 0
+		tv        = uint32(0)
+		n         = int64(0)
+		linelen   = 0
 	)
 	for {
 		tv = (tv << 8) & (1<<24 - 1)
@@ -146,6 +147,7 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) error {
 			}
 			buf = buf[:n]
 			i = 0
+			readCount += 1
 		}
 		c = buf[i]
 		i++
@@ -199,7 +201,17 @@ func (iw *IndexWriter) Add(name string, f io.ReadSeeker) error {
 	if err := iw.db.Set(filenameKey(digest), []byte(name), pebble.NoSync); err != nil {
 		return err
 	}
-	if err := iw.db.Set(dataKey(digest), buf, pebble.NoSync); err != nil {
+	var fileBuf []byte
+	if readCount == 1 {
+		fileBuf = buf
+	} else {
+		f.Seek(0, 0)
+		fileBuf, err = io.ReadAll(f)
+		if err != nil {
+			return err
+		}
+	}
+	if err := iw.db.Set(dataKey(digest), fileBuf, pebble.NoSync); err != nil {
 		return err
 	}
 	if err := iw.db.Set(namehashKey(hashString(name)), []byte(digest), pebble.NoSync); err != nil {

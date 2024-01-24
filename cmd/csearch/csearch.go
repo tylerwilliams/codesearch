@@ -51,11 +51,12 @@ func usage() {
 }
 
 var (
-	fFlag       = flag.String("f", "", "search only files with names matching this regexp")
-	iFlag       = flag.Bool("i", false, "case-insensitive search")
-	verboseFlag = flag.Bool("verbose", false, "print extra information")
-	bruteFlag   = flag.Bool("brute", false, "brute force - search all files in index")
-	cpuProfile  = flag.String("cpuprofile", "", "write cpu profile to this file")
+	fFlag           = flag.String("f", "", "search only files with names matching this regexp")
+	iFlag           = flag.Bool("i", false, "case-insensitive search")
+	verboseFlag     = flag.Bool("verbose", false, "print extra information")
+	bruteFlag       = flag.Bool("brute", false, "brute force - search all files in index")
+	cpuProfile      = flag.String("cpuprofile", "", "write cpu profile to this file")
+	newStyleResults = flag.Bool("new_style_results", true, "if true; show new style results")
 
 	listMatchesOnly = flag.Bool("l", false, "list matching files only")
 	matchCountsOnly = flag.Bool("c", false, "print match counts only")
@@ -182,8 +183,15 @@ func Main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		r := bytes.NewReader(buf)
-		g.Reader(r, name)
+		if !*newStyleResults {
+			g.Reader(bytes.NewReader(buf), name)
+		} else {
+			res, err := g.MakeResult(bytes.NewReader(buf), name)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("%+v", res)
+		}
 	}
 
 	matches = g.Match

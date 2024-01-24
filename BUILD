@@ -1,3 +1,4 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("//rules/go:index.bzl", "go_sdk_tool")
 
@@ -26,4 +27,11 @@ go_sdk_tool(
 go_sdk_tool(
     name = "gofmt",
     goroot_relative_path = "bin/gofmt",
+)
+
+go_library(
+    name = "codesearch",
+    srcs = ["result.go"],
+    importpath = "github.com/google/codesearch",
+    visibility = ["//visibility:public"],
 )

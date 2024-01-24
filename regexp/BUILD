@@ -10,7 +10,10 @@ go_library(
     ],
     importpath = "github.com/google/codesearch/regexp",
     visibility = ["//visibility:public"],
-    deps = ["//sparse"],
+    deps = [
+        "//result",
+        "//sparse",
+    ],
 )
 
 go_test(
